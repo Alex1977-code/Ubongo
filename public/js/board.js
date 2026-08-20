@@ -112,8 +112,8 @@ export class BoardView {
       if (p.placed || p.drag) continue;
       const t = p.tray;
       if (this.cells(p).some(([cx, cy]) =>
-        x >= t.x + cx * t.cell - 5 && x <= t.x + (cx + 1) * t.cell + 5 &&
-        y >= t.y + cy * t.cell - 5 && y <= t.y + (cy + 1) * t.cell + 5)) return p;
+        x >= t.x + cx * t.cell - 9 && x <= t.x + (cx + 1) * t.cell + 9 &&
+        y >= t.y + cy * t.cell - 9 && y <= t.y + (cy + 1) * t.cell + 9)) return p;
     }
     return null;
   }
@@ -124,7 +124,17 @@ export class BoardView {
   }
 
   _down(e) {
-    if (this.locked || this.dragPiece) return;
+    if (this.locked) return;
+    // Zweiter Finger während des Ziehens: Teil drehen
+    if (this.dragPiece) {
+      const dp = this.dragPiece;
+      if (dp.drag && e.pointerId !== dp.drag.pointerId) {
+        e.preventDefault();
+        dp.rot = (dp.rot + 1) % 4;
+        snd.rotate();
+      }
+      return;
+    }
     const { x, y } = this._pos(e);
     const p = this._pieceAt(x, y);
     if (!p) return;
@@ -133,11 +143,22 @@ export class BoardView {
     this.selectedId = p.id;
     const wasPlaced = p.placed;
     const b = bounds(this.cells(p));
+    // Griffpunkt merken: Das Teil bleibt an der Stelle unterm Finger, an der
+    // es angefasst wurde (kein "Springen" zur Mitte), nur leicht angehoben.
+    let relX, relY; // Griffpunkt in Zell-Einheiten, auf das Teil begrenzt
+    if (wasPlaced) {
+      relX = (x - (this.bx + wasPlaced.gx * this.cell)) / this.cell;
+      relY = (y - (this.by + wasPlaced.gy * this.cell)) / this.cell;
+    } else {
+      relX = (x - p.tray.x) / p.tray.cell;
+      relY = (y - p.tray.y) / p.tray.cell;
+    }
+    relX = Math.max(0.2, Math.min(b.w - 0.2, relX));
+    relY = Math.max(0.2, Math.min(b.h - 0.2, relY));
     p.drag = {
       pointerId: e.pointerId, x, y, startX: x, startY: y, t0: performance.now(),
       wasPlaced: wasPlaced ? { ...wasPlaced } : null, moved: false,
-      // Griff: Teil unter dem Finger zentrieren, etwas nach oben versetzt
-      ox: -b.w * this.cell / 2, oy: -b.h * this.cell / 2 - this.cell * 1.1,
+      ox: -relX * this.cell, oy: -relY * this.cell - this.cell * 1.1,
     };
     p.placed = null;
     this.dragPiece = p;
@@ -176,20 +197,42 @@ export class BoardView {
       return;
     }
 
-    // Ablegen: Rasterposition unter dem Teil bestimmen
+    // Ablegen: passende Rasterposition suchen (mit Einrast-Hilfe in der Nähe)
     const px = d.x + d.ox, py = d.y + d.oy;
-    const gx = Math.round((px - this.bx) / this.cell);
-    const gy = Math.round((py - this.by) / this.cell);
-    if (this._fits(p, gx, gy)) {
-      p.placed = { gx, gy };
+    const snap = this._snapPos(p, px, py);
+    if (snap) {
+      p.placed = snap;
       p.settle = performance.now(); // kleine "Setz"-Animation beim Einrasten
       snd.place();
       this.onPlace();
       if (this.pieces.every(q => q.placed)) { this.locked = true; this.onSolved(); }
-    } else if (d.moved && this.cells(p).some(([cx, cy]) => this.region.has(K(cx + gx, cy + gy)))) {
-      snd.invalid(); // aufs Brett gelegt, passt dort aber nicht
+    } else if (d.moved) {
+      const gx = Math.round((px - this.bx) / this.cell);
+      const gy = Math.round((py - this.by) / this.cell);
+      if (this.cells(p).some(([cx, cy]) => this.region.has(K(cx + gx, cy + gy)))) {
+        snd.invalid(); // aufs Brett gelegt, passt dort aber nicht
+      }
     }
     this._after();
+  }
+
+  // Einrast-Hilfe: exakte Position zuerst, sonst die nächstgelegene passende
+  // Nachbarposition im Umkreis von ~1 Zelle.
+  _snapPos(p, px, py) {
+    const exactX = (px - this.bx) / this.cell, exactY = (py - this.by) / this.cell;
+    const gx = Math.round(exactX), gy = Math.round(exactY);
+    const cand = [];
+    for (let dx = -1; dx <= 1; dx++) {
+      for (let dy = -1; dy <= 1; dy++) {
+        const dist = Math.hypot(gx + dx - exactX, gy + dy - exactY);
+        if (dist <= 1.05) cand.push({ gx: gx + dx, gy: gy + dy, dist });
+      }
+    }
+    cand.sort((a, b) => a.dist - b.dist);
+    for (const c of cand) {
+      if (this._fits(p, c.gx, c.gy)) return { gx: c.gx, gy: c.gy };
+    }
+    return null;
   }
 
   _transform(p, wasPlaced, kind) {
@@ -332,14 +375,14 @@ export class BoardView {
       ctx2.shadowBlur = 16;
       ctx2.shadowOffsetY = 10;
       const px = dp.drag.x + dp.drag.ox, py = dp.drag.y + dp.drag.oy;
-      // Einrast-Vorschau
-      const gx = Math.round((px - this.bx) / c), gy = Math.round((py - this.by) / c);
-      if (this._fits(dp, gx, gy)) {
+      // Einrast-Vorschau (gleiche Logik wie beim Ablegen, inkl. Einrast-Hilfe)
+      const snap = this._snapPos(dp, px, py);
+      if (snap) {
         ctx2.save();
         ctx2.globalAlpha = .35;
         for (const [cx, cy] of this.cells(dp)) {
           ctx2.fillStyle = '#ffffff';
-          this._rr(ctx2, this.bx + (cx + gx) * c + 3, this.by + (cy + gy) * c + 3, c - 6, c - 6, 6);
+          this._rr(ctx2, this.bx + (cx + snap.gx) * c + 3, this.by + (cy + snap.gy) * c + 3, c - 6, c - 6, 6);
           ctx2.fill();
         }
         ctx2.restore();

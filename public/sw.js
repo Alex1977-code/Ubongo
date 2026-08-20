@@ -1,10 +1,10 @@
 // Service Worker: online immer die neueste Version, offline aus dem Cache (Solo-Modus).
-const CACHE = 'ubongo-v3';
+const CACHE = 'ubongo-v4';
 const SHELL = [
   '.', 'index.html', 'css/style.css', 'manifest.webmanifest', 'icons/icon.svg',
   'icons/icon-192.png', 'icons/icon-512.png',
   'js/main.js', 'js/game.js', 'js/board.js', 'js/ai.js', 'js/net.js',
-  'js/highscore.js', 'js/cardgen.js', 'js/pieces.js', 'js/sound.js',
+  'js/highscore.js', 'js/cardgen.js', 'js/pieces.js', 'js/sound.js', 'js/gems.js',
 ];
 
 self.addEventListener('install', (e) => {

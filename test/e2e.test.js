@@ -59,7 +59,7 @@ try {
 
   // Tipp-Funktion kostet 5 Punkte
   await p.click('#ctrl-solution');
-  assert(await p.evaluate(() => window.__ubongo.game.hintPenalty) === 5, 'Tipp kostet 5 Punkte');
+  assert(await p.evaluate(() => window.__ubongo.game.hintUsed) === true, 'Tipp gemerkt (kostet den Bernstein)');
 
   // Ein Teil per Drag korrekt platzieren (echte Geste)
   const drag = await p.evaluate(() => {
@@ -77,14 +77,14 @@ try {
     }
     b._layoutTray();
     const t2 = pc.tray, cc = b.cells(pc)[0];
-    const bounds = b.cells(pc).reduce((acc, [x, y]) => ({ w: Math.max(acc.w, x + 1), h: Math.max(acc.h, y + 1) }), { w: 0, h: 0 });
+    // Neuer Griff: Der angefasste Punkt bleibt unterm Finger (plus 1,1 Zellen Anhebung).
+    // Wir fassen die Mitte der ersten Zelle an und peilen deren Zielposition an.
     return {
       id: sol.id,
       from: { x: r.left + t2.x + (cc[0] + 0.5) * t2.cell, y: r.top + t2.y + (cc[1] + 0.5) * t2.cell },
-      // Griff zentriert das Teil unterm Finger, um 1.1 Zellen angehoben – Ziel entsprechend anpeilen
       to: {
-        x: r.left + b.bx + (minX + bounds.w / 2) * b.cell,
-        y: r.top + b.by + (minY + bounds.h / 2) * b.cell + b.cell * 1.1,
+        x: r.left + b.bx + (minX + cc[0] + 0.5) * b.cell,
+        y: r.top + b.by + (minY + cc[1] + 0.5) * b.cell + b.cell * 1.1,
       },
     };
   });
@@ -109,8 +109,12 @@ try {
     g.board.reveal(g.card.solution);
     g._solved();
   });
-  await p.waitForSelector('#overlay-result:not(.hidden)', { timeout: 8000 });
+  await p.waitForSelector('#overlay-result:not(.hidden)', { timeout: 10000 });
   assert(true, 'Runden-Ergebnis erscheint');
+  const gemsInTable = await p.evaluate(() => document.querySelectorAll('#result-table svg.gem').length);
+  assert(gemsInTable > 0, `Edelsteine im Rundenergebnis sichtbar (${gemsInTable})`);
+  const shelfShown = await p.evaluate(() => !document.getElementById('gem-shelf').classList.contains('hidden'));
+  assert(shelfShown, 'Schatzleiste im Spielfeld sichtbar');
   await p.screenshot({ path: SHOT_DIR + '/shot-result.png' });
   await p.click('#result-next');
   await p.waitForSelector('#overlay-final:not(.hidden)');

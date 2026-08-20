@@ -59,8 +59,11 @@ Jede Runde erhält jeder Spieler eine eigene **Karte** (Fläche) und die passend
 **Legeteile**. Wer die Fläche zuerst lückenlos und ohne Überlappung füllt, ruft
 **„UBONGO!“**.
 
-**Punkte:** Gelöst = 10 · Schnellster +5 · Zweiter +3 · Dritter +1 ·
-Zeitbonus +1 pro 10 Sekunden Restzeit.
+**Edelsteine:** Wer löst, sammelt wie im Original Edelsteine – Schnellster:
+**Saphir (4)**, Zweiter: **Rubin (3)**, Dritter: **Smaragd (2)**, jeder Löser
+zusätzlich einen **Bernstein (1)** (entfällt bei 💡-Tipp). Nach allen Runden
+gewinnt der wertvollste Schatz. Sobald du gelöst hast, läuft die Restzeit der
+Computer-Gegner im **Schnellvorlauf**.
 
 ## 🛠️ Technik
 

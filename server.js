@@ -7,6 +7,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { WebSocketServer } from 'ws';
 import { generateCard, DIFFICULTIES } from './public/js/cardgen.js';
+import { roundGems, gemPoints } from './public/js/gems.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC = path.join(__dirname, 'public');
@@ -95,23 +96,20 @@ function finishRound(room) {
   if (room.state !== 'playing') return;
   room.state = 'between';
   clearTimeout(room.timer);
-  const time = DIFFICULTIES[room.difficulty].time;
-  const finished = room.players.filter(p => p.done).sort((a, b) => a.ms - b.ms);
-  const rankBonus = [5, 3, 1];
+  // Edelstein-Wertung wie im Original: Schnellster Saphir (4), Zweiter Rubin (3),
+  // Dritter Smaragd (2), jeder Löser zusätzlich Bernstein (1).
+  const finished = room.players.filter(p => p.done && p.ms !== null).sort((a, b) => a.ms - b.ms);
   const results = room.players.map(p => {
-    let pts = 0;
-    if (p.done) {
-      const rank = finished.indexOf(p);
-      const rest = Math.max(0, time - p.ms / 1000);
-      pts = 10 + (rankBonus[rank] || 0) + Math.floor(rest / 10);
-    }
+    const gems = roundGems(finished.indexOf(p), p.done && p.ms !== null);
+    const pts = gemPoints(gems);
     p.total += pts;
-    return { id: p.id, name: p.name, ms: p.ms, points: pts, total: p.total };
+    p.gems.push(...gems);
+    return { id: p.id, name: p.name, ms: p.ms, gems, points: pts, total: p.total };
   });
   broadcast(room, { t: 'roundResult', n: room.round, of: room.rounds, results });
   if (room.round >= room.rounds) {
     room.state = 'final';
-    const ranking = room.players.map(p => ({ id: p.id, name: p.name, total: p.total }))
+    const ranking = room.players.map(p => ({ id: p.id, name: p.name, total: p.total, gems: p.gems }))
       .sort((a, b) => b.total - a.total);
     for (const p of room.players) {
       addHighscore({ name: p.name, score: p.total, difficulty: room.difficulty, date: new Date().toISOString().slice(0, 10), online: true });
@@ -152,7 +150,7 @@ wss.on('connection', (ws) => {
         const code = newCode();
         const diff = DIFFICULTIES[msg.difficulty] ? msg.difficulty : 'mittel';
         const rounds = Math.min(9, Math.max(1, msg.rounds | 0)) || 3;
-        const player = { id: nextPlayerId++, ws, name: clean(msg.name) || 'Spieler', total: 0, done: false, ms: null };
+        const player = { id: nextPlayerId++, ws, name: clean(msg.name) || 'Spieler', total: 0, gems: [], done: false, ms: null };
         const r = { code, players: [player], hostId: player.id, difficulty: diff, rounds, round: 0, state: 'lobby', timer: null };
         rooms.set(code, r);
         ws.room = r;
@@ -165,7 +163,7 @@ wss.on('connection', (ws) => {
         if (!r) { send(ws, { t: 'error', msg: 'Raum nicht gefunden.' }); return; }
         if (r.state !== 'lobby') { send(ws, { t: 'error', msg: 'Das Spiel läuft bereits.' }); return; }
         if (r.players.length >= 8) { send(ws, { t: 'error', msg: 'Der Raum ist voll (max. 8).' }); return; }
-        const player = { id: nextPlayerId++, ws, name: clean(msg.name) || 'Spieler', total: 0, done: false, ms: null };
+        const player = { id: nextPlayerId++, ws, name: clean(msg.name) || 'Spieler', total: 0, gems: [], done: false, ms: null };
         r.players.push(player);
         ws.room = r;
         send(ws, { t: 'you', id: player.id });
@@ -186,7 +184,7 @@ wss.on('connection', (ws) => {
         const me = room.players.find(p => p.ws === ws);
         if (!me || me.id !== room.hostId) return;
         if (room.players.length < 2) { send(ws, { t: 'error', msg: 'Mindestens 2 Spieler nötig.' }); return; }
-        if (room.state === 'final') { room.round = 0; for (const p of room.players) p.total = 0; }
+        if (room.state === 'final') { room.round = 0; for (const p of room.players) { p.total = 0; p.gems = []; } }
         startRound(room);
         break;
       }
