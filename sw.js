@@ -1,5 +1,5 @@
-// Service Worker: App-Hülle vorab speichern, damit Ubongo offline läuft (Solo-Modus).
-const CACHE = 'ubongo-v2';
+// Service Worker: online immer die neueste Version, offline aus dem Cache (Solo-Modus).
+const CACHE = 'ubongo-v3';
 const SHELL = [
   '.', 'index.html', 'css/style.css', 'manifest.webmanifest', 'icons/icon.svg',
   'icons/icon-192.png', 'icons/icon-512.png',
@@ -21,14 +21,19 @@ self.addEventListener('activate', (e) => {
 self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url);
   if (url.pathname.startsWith('/ws') || url.pathname.startsWith('/api/')) return; // live
+  if (e.request.method !== 'GET' || url.origin !== location.origin) return;
+  // Netzwerk zuerst: online kommt immer der aktuelle Stand, der Cache wird
+  // dabei aufgefrischt und dient nur offline als Reserve.
   e.respondWith(
-    caches.match(e.request).then(hit => hit ||
-      fetch(e.request).then(res => {
-        if (res.ok && e.request.method === 'GET' && url.origin === location.origin) {
-          const copy = res.clone();
-          caches.open(CACHE).then(c => c.put(e.request, copy));
-        }
-        return res;
-      }))
+    fetch(e.request).then(res => {
+      if (res.ok) {
+        const copy = res.clone();
+        caches.open(CACHE).then(c => c.put(e.request, copy));
+      }
+      return res;
+    }).catch(() =>
+      caches.match(e.request).then(hit =>
+        hit || (e.request.mode === 'navigate' ? caches.match('index.html') : Response.error()))
+    )
   );
 });
