@@ -14,6 +14,12 @@ Solo-Modus sogar offline.
 - **Unendlich viele Karten:** prozeduraler Karten-Generator – jede Karte ist garantiert lösbar
 - **4 Schwierigkeitsgrade:** Leicht (3 Teile) · Mittel (4) · Schwer (5) · Experte (6)
 - **Touch-Steuerung:** Ziehen = bewegen · Tippen = drehen · Doppeltipp = spiegeln
+- **Sound & Musik:** prozedurale Sound-Effekte per WebAudio (Klick, Klack, Countdown,
+  Fanfaren, 10-Sekunden-Warnton – ganz ohne Audio-Dateien) und eine leise
+  Kalimba-Ambient-Musik. Beides im Spiel einzeln abschaltbar: 🔊/🔇 für Effekte,
+  🎵 für Musik – die Einstellung wird gespeichert
+- **Stimmungsvolle Grafik:** Savannen-Abendszene auf dem Startbildschirm (Inline-SVG),
+  Glühwürmchen, Holz-Sockel unter der Karte, Setz-Animation beim Einrasten
 - **Extras:** Countdown, Konfetti, „UBONGO!“-Ruf, Tipp-Funktion (💡, kostet 5 Punkte),
   Vibration beim Lösen, KI-Gegner mit sichtbarem Fortschritt
 
@@ -85,6 +91,7 @@ public/
   js/board.js        Spielbrett: Canvas-Rendering + Touch-Steuerung
   js/game.js         Rundenablauf, Timer, Punkte, Konfetti
   js/ai.js           Computer-Gegner
+  js/sound.js        Sound-Effekte + Ambient-Musik (prozedural per WebAudio)
   js/net.js          WebSocket-Client
   js/highscore.js    Lokale + Online-Highscores
   sw.js              Service Worker (offline)

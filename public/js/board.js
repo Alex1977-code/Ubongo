@@ -2,6 +2,7 @@
 // Ziehen = bewegen, Tippen = drehen, Doppeltipp = spiegeln, Einrasten am Raster.
 
 import { PIECE_MAP, transform, bounds } from './pieces.js';
+import * as snd from './sound.js';
 
 const K = (x, y) => x + ',' + y;
 
@@ -149,7 +150,10 @@ export class BoardView {
     e.preventDefault();
     const { x, y } = this._pos(e);
     p.drag.x = x; p.drag.y = y;
-    if (Math.hypot(x - p.drag.startX, y - p.drag.startY) > 12) p.drag.moved = true;
+    if (!p.drag.moved && Math.hypot(x - p.drag.startX, y - p.drag.startY) > 12) {
+      p.drag.moved = true;
+      snd.pickup();
+    }
   }
 
   _up(e, cancel = false) {
@@ -178,8 +182,12 @@ export class BoardView {
     const gy = Math.round((py - this.by) / this.cell);
     if (this._fits(p, gx, gy)) {
       p.placed = { gx, gy };
+      p.settle = performance.now(); // kleine "Setz"-Animation beim Einrasten
+      snd.place();
       this.onPlace();
       if (this.pieces.every(q => q.placed)) { this.locked = true; this.onSolved(); }
+    } else if (d.moved && this.cells(p).some(([cx, cy]) => this.region.has(K(cx + gx, cy + gy)))) {
+      snd.invalid(); // aufs Brett gelegt, passt dort aber nicht
     }
     this._after();
   }
@@ -187,7 +195,8 @@ export class BoardView {
   _transform(p, wasPlaced, kind) {
     const before = this.cells(p);
     const c0 = bounds(before);
-    if (kind === 'flip') p.flip = 1 - p.flip; else p.rot = (p.rot + 1) % 4;
+    if (kind === 'flip') { p.flip = 1 - p.flip; snd.flip(); }
+    else { p.rot = (p.rot + 1) % 4; snd.rotate(); }
     if (wasPlaced) {
       // Um die Mitte drehen und wieder einsetzen, wenn es passt
       const c1 = bounds(this.cells(p));
@@ -257,8 +266,10 @@ export class BoardView {
     const ctx = this.ctx;
     ctx.clearRect(0, 0, this.w, this.h);
 
-    // Karten-Sockel (Vertiefungen)
     const c = this.cell;
+    this._drawWoodPanel(ctx, c);
+
+    // Karten-Sockel (Vertiefungen)
     ctx.save();
     for (const [x, y] of this.card.cells) {
       const px = this.bx + x * c, py = this.by + y * c;
@@ -288,10 +299,24 @@ export class BoardView {
       }
     }
 
-    // Platzierte Teile
+    // Platzierte Teile (frisch eingerastete "setzen" sich kurz)
     for (const p of this.pieces) {
       if (!p.placed) continue;
-      this._drawPiece(p, this.bx + p.placed.gx * c, this.by + p.placed.gy * c, c, p.id === this.selectedId && !this.locked);
+      const ox = this.bx + p.placed.gx * c, oy = this.by + p.placed.gy * c;
+      const sel = p.id === this.selectedId && !this.locked;
+      if (p.settle != null) {
+        const t = (performance.now() - p.settle) / 240;
+        if (t >= 1) { p.settle = null; this._drawPiece(p, ox, oy, c, sel); continue; }
+        const k = 1 + 0.12 * (1 - t) * Math.cos(t * Math.PI * 2.2); // gedämpftes Einschwingen
+        const b = bounds(this.cells(p));
+        const cx = ox + b.w * c / 2, cy = oy + b.h * c / 2;
+        ctx.save();
+        ctx.translate(cx, cy); ctx.scale(k, k); ctx.translate(-cx, -cy);
+        this._drawPiece(p, ox, oy, c, sel);
+        ctx.restore();
+      } else {
+        this._drawPiece(p, ox, oy, c, sel);
+      }
     }
     // Ablage-Teile
     for (const p of this.pieces) {
@@ -322,6 +347,49 @@ export class BoardView {
       this._drawPiece(dp, px, py, c, true);
       ctx2.restore();
     }
+  }
+
+  // Holz-Sockel hinter der Karte – lässt die Karte plastischer wirken.
+  _drawWoodPanel(ctx, c) {
+    const bw = this.cardBounds.w * c, bh = this.cardBounds.h * c;
+    const pad = Math.min(14, c * 0.34);
+    const x = this.bx - pad, y = this.by - pad, w = bw + pad * 2, h = bh + pad * 2;
+
+    ctx.save();
+    ctx.shadowColor = 'rgba(0,0,0,.38)';
+    ctx.shadowBlur = 16;
+    ctx.shadowOffsetY = 7;
+    const wood = ctx.createLinearGradient(0, y, 0, y + h);
+    wood.addColorStop(0, '#9a5526');
+    wood.addColorStop(0.5, '#7c3d15');
+    wood.addColorStop(1, '#5d2b0d');
+    ctx.fillStyle = wood;
+    this._rr(ctx, x, y, w, h, 12);
+    ctx.fill();
+    ctx.restore();
+
+    ctx.save();
+    // Dezente Maserung (deterministisch, kein Flackern)
+    ctx.globalAlpha = 0.13;
+    ctx.strokeStyle = '#3a1a06';
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    const lines = Math.max(3, Math.round(h / 24));
+    for (let i = 1; i <= lines; i++) {
+      const ly = y + (h * i) / (lines + 1);
+      ctx.moveTo(x + 5, ly);
+      for (let lx = 0; lx <= w - 10; lx += 10) {
+        ctx.lineTo(x + 5 + lx, ly + Math.sin((lx + i * 53) / 26) * 1.6);
+      }
+    }
+    ctx.stroke();
+    // Warme Lichtkante
+    ctx.globalAlpha = 0.22;
+    ctx.strokeStyle = '#ffd9a0';
+    ctx.lineWidth = 1.5;
+    this._rr(ctx, x + 1.5, y + 1.5, w - 3, h - 3, 10);
+    ctx.stroke();
+    ctx.restore();
   }
 
   _drawPiece(p, ox, oy, c, selected) {

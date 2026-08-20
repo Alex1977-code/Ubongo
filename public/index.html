@@ -15,6 +15,109 @@
 
   <!-- ===== Startbildschirm ===== -->
   <section id="screen-start" class="screen active">
+    <!-- Savannen-Abendstimmung: komplett als Inline-SVG gezeichnet -->
+    <div class="savanna" aria-hidden="true">
+      <svg class="savanna-svg" viewBox="0 0 390 780" preserveAspectRatio="xMidYMax slice">
+        <defs>
+          <linearGradient id="sv-sky" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stop-color="#2b0d02"/>
+            <stop offset=".38" stop-color="#6b2a0c"/>
+            <stop offset=".62" stop-color="#a34413"/>
+            <stop offset=".78" stop-color="#cc5f1c"/>
+            <stop offset="1" stop-color="#e8862a"/>
+          </linearGradient>
+          <radialGradient id="sv-glow" cx=".5" cy=".5" r=".5">
+            <stop offset="0" stop-color="#ffd98f" stop-opacity=".65"/>
+            <stop offset=".55" stop-color="#ffb35c" stop-opacity=".28"/>
+            <stop offset="1" stop-color="#ffb35c" stop-opacity="0"/>
+          </radialGradient>
+          <radialGradient id="sv-sun" cx=".5" cy=".42" r=".6">
+            <stop offset="0" stop-color="#ffedb8"/>
+            <stop offset=".7" stop-color="#ffc465"/>
+            <stop offset="1" stop-color="#ff9e3d"/>
+          </radialGradient>
+          <radialGradient id="sv-vig" cx=".5" cy=".42" r=".85">
+            <stop offset="0" stop-color="#190500" stop-opacity="0"/>
+            <stop offset=".68" stop-color="#190500" stop-opacity="0"/>
+            <stop offset="1" stop-color="#190500" stop-opacity=".55"/>
+          </radialGradient>
+        </defs>
+        <rect width="390" height="780" fill="url(#sv-sky)"/>
+        <!-- Sterne im dunklen Teil des Himmels -->
+        <g fill="#ffdca6">
+          <circle cx="42" cy="64" r="1.6" opacity=".7"/>
+          <circle cx="118" cy="38" r="1.2" opacity=".5"/>
+          <circle cx="205" cy="72" r="1.4" opacity=".6"/>
+          <circle cx="292" cy="46" r="1.1" opacity=".45"/>
+          <circle cx="348" cy="96" r="1.5" opacity=".6"/>
+          <circle cx="74" cy="128" r="1.2" opacity=".4"/>
+          <circle cx="256" cy="118" r="1" opacity=".35"/>
+        </g>
+        <!-- Tiefstehende Sonne mit warmem Glühen -->
+        <circle cx="252" cy="590" r="150" fill="url(#sv-glow)"/>
+        <circle cx="252" cy="596" r="52" fill="url(#sv-sun)"/>
+        <!-- Vögel -->
+        <g stroke="#2a0e02" stroke-width="2" fill="none" stroke-linecap="round" opacity=".8">
+          <path d="M96 300 q6 -7 12 0 q6 -7 12 0"/>
+          <path d="M140 322 q5 -6 10 0 q5 -6 10 0"/>
+          <path d="M300 268 q5 -6 10 0 q5 -6 10 0"/>
+        </g>
+        <!-- Boden-Silhouette mit sanften Hügeln -->
+        <path d="M0 612 Q60 600 130 606 T260 602 T390 608 L390 780 L0 780 Z" fill="#240b01"/>
+        <!-- Elefant vor der Sonne -->
+        <g fill="#1c0801">
+          <ellipse cx="242" cy="585" rx="21" ry="13"/>
+          <circle cx="266" cy="576" r="9"/>
+          <path d="M272 569 c7 2 9.5 8 8.5 13 c-1 6 -4 11 -4 16 l-4.5 -1 c1 -5 3 -10 3.5 -15 c.5 -5 -1.5 -8 -6 -10 z"/>
+          <rect x="228" y="591" width="6" height="12" rx="2.5"/>
+          <rect x="238" y="593" width="6" height="10" rx="2.5"/>
+          <rect x="248" y="593" width="6" height="10" rx="2.5"/>
+          <rect x="256" y="590" width="6" height="13" rx="2.5"/>
+          <path d="M223 578 q-5 3 -4 9 l2.6 .3 q0 -5 3 -7.3 z"/>
+        </g>
+        <!-- Giraffe am Horizont -->
+        <g fill="#1c0801">
+          <ellipse cx="134" cy="592" rx="14" ry="8.5"/>
+          <rect x="123" y="596" width="4" height="16" rx="1.8"/>
+          <rect x="131" y="598" width="4" height="14" rx="1.8"/>
+          <rect x="138" y="598" width="4" height="14" rx="1.8"/>
+          <rect x="144" y="596" width="4" height="16" rx="1.8"/>
+          <path d="M144 588 L141 586 Q150 570 154 558 L159 559 Q155 574 148 589 Z"/>
+          <ellipse cx="158" cy="556" rx="5.5" ry="4" transform="rotate(24 158 556)"/>
+          <path d="M154 552 l-1.5 -5 2.6 -.4 1.4 4.6 z"/>
+          <path d="M160 551 l.6 -5 2.6 .6 -1 4.6 z"/>
+        </g>
+        <!-- Akazien -->
+        <g fill="#1c0801" stroke="#1c0801" stroke-linecap="round">
+          <g stroke-width="4" fill="none">
+            <path d="M64 612 C66 588 62 574 58 562"/>
+            <path d="M60 578 C52 570 46 566 38 562"/>
+            <path d="M62 572 C72 562 80 558 90 554"/>
+          </g>
+          <ellipse cx="62" cy="550" rx="48" ry="12" stroke="none"/>
+          <ellipse cx="58" cy="559" rx="32" ry="8" stroke="none"/>
+          <g stroke-width="3" fill="none">
+            <path d="M336 610 C337 594 335 586 332 578"/>
+            <path d="M334 590 C328 584 324 582 318 579"/>
+            <path d="M335 586 C342 579 347 577 354 574"/>
+          </g>
+          <ellipse cx="335" cy="572" rx="32" ry="8.5" stroke="none"/>
+          <ellipse cx="332" cy="578" rx="21" ry="5.5" stroke="none"/>
+        </g>
+        <!-- Grasbüschel -->
+        <g stroke="#1c0801" stroke-width="2" fill="none" stroke-linecap="round">
+          <path d="M22 616 q-2 -8 -6 -11 M22 616 q0 -9 2 -13 M22 616 q4 -7 8 -9"/>
+          <path d="M186 610 q-2 -7 -5 -9 M186 610 q1 -8 3 -11 M186 610 q4 -6 7 -7"/>
+          <path d="M368 618 q-2 -8 -5 -10 M368 618 q1 -9 3 -12 M368 618 q4 -6 7 -8"/>
+        </g>
+        <!-- Dezente Vignette -->
+        <rect width="390" height="780" fill="url(#sv-vig)"/>
+      </svg>
+      <!-- Glühwürmchen (CSS-animiert, bei reduced-motion statisch) -->
+      <span class="fly"></span><span class="fly"></span><span class="fly"></span>
+      <span class="fly"></span><span class="fly"></span><span class="fly"></span>
+      <span class="fly"></span>
+    </div>
     <div class="start-hero">
       <div class="logo-wrap">
         <svg class="logo" viewBox="0 0 120 120" aria-hidden="true">
@@ -135,6 +238,8 @@
       <button class="btn btn-back" id="game-exit">✕</button>
       <div class="game-round" id="game-round">Runde 1/3</div>
       <div class="game-timer" id="game-timer">2:00</div>
+      <button class="btn btn-back btn-snd" id="ctrl-music" aria-label="Musik an/aus">🎵</button>
+      <button class="btn btn-back btn-snd" id="ctrl-mute" aria-label="Ton an/aus">🔊</button>
     </header>
     <div class="timer-bar"><div class="timer-fill" id="timer-fill"></div></div>
     <div class="opponents" id="opponents"></div>

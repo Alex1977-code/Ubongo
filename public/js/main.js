@@ -3,6 +3,7 @@
 import { Game } from './game.js';
 import { Net } from './net.js';
 import { localScores, onlineScores, getName, setName } from './highscore.js';
+import { unlock, isMuted, toggleMuted, isMusicOn, toggleMusic } from './sound.js';
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[<>&]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]));
@@ -20,6 +21,22 @@ if (!CanvasRenderingContext2D.prototype.roundRect) {
     return this;
   };
 }
+
+// ---------- Klang ----------
+// AudioContext erst nach der ersten Nutzer-Geste erzeugen (Pflicht auf Handys).
+window.addEventListener('pointerdown', () => unlock(), { once: true });
+window.addEventListener('keydown', () => unlock(), { once: true });
+
+const muteBtn = $('ctrl-mute'), musicBtn = $('ctrl-music');
+function renderSoundButtons() {
+  muteBtn.textContent = isMuted() ? '🔇' : '🔊';
+  muteBtn.setAttribute('aria-label', isMuted() ? 'Ton einschalten' : 'Ton ausschalten');
+  musicBtn.classList.toggle('off', !isMusicOn());
+  musicBtn.setAttribute('aria-label', isMusicOn() ? 'Musik ausschalten' : 'Musik einschalten');
+}
+muteBtn.addEventListener('click', () => { toggleMuted(); renderSoundButtons(); });
+musicBtn.addEventListener('click', () => { toggleMusic(); renderSoundButtons(); });
+renderSoundButtons();
 
 // ---------- Bildschirm-Navigation ----------
 function show(name) {

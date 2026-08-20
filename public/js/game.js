@@ -5,6 +5,7 @@ import { generateCard, DIFFICULTIES } from './cardgen.js';
 import { BoardView } from './board.js';
 import { makeBots, newRound, botProgress, botTick } from './ai.js';
 import { addLocalScore } from './highscore.js';
+import * as snd from './sound.js';
 
 const $ = (id) => document.getElementById(id);
 const fmt = (ms) => {
@@ -46,6 +47,7 @@ export class Game {
     if (this.destroyed) return;
     this.round++;
     this.hintPenalty = 0;
+    this._warned = false;
     this.myMs = null; this.myDone = false;
     this.card = generateCard(seed, this.o.difficulty);
     $('game-round').textContent = `Runde ${this.round}/${this.o.rounds}`;
@@ -69,12 +71,14 @@ export class Game {
     ov.classList.remove('hidden');
     let n = 3;
     num.textContent = n;
+    snd.countdown();
     const cd = setInterval(() => {
       if (this.destroyed) { clearInterval(cd); return; }
       n--;
-      if (n > 0) { num.textContent = n; return; }
+      if (n > 0) { num.textContent = n; snd.countdown(); return; }
       clearInterval(cd);
       ov.classList.add('hidden');
+      snd.go(); // höherer Ton: los geht's!
       this._startTimer();
       this.board.locked = false;
     }, 900);
@@ -96,6 +100,11 @@ export class Game {
     el.textContent = fmt(left);
     el.classList.toggle('low', left < 15000 && !this.myDone);
     $('timer-fill').style.width = Math.max(0, (left / (this.diff.time * 1000)) * 100) + '%';
+
+    if (!this.myDone && !this._warned && left <= 10000 && left > 0) {
+      this._warned = true;
+      snd.warn(); // nur noch 10 Sekunden!
+    }
 
     if (this.mode === 'solo') {
       const elapsed = now - this.t0;
@@ -119,6 +128,7 @@ export class Game {
     this.myMs = Math.round(performance.now() - this.t0);
     $('overlay-solved').classList.remove('hidden');
     setTimeout(() => $('overlay-solved').classList.add('hidden'), 1600);
+    snd.solve(); // UBONGO!-Fanfare
     confetti($('confetti'));
     if (navigator.vibrate) navigator.vibrate([60, 40, 120]);
     if (this.mode === 'online') this.o.net.send({ t: 'solved', ms: this.myMs });
@@ -155,6 +165,7 @@ export class Game {
     $('result-wait').classList.toggle('hidden', solo);
     $('result-next').textContent = last ? 'Zum Endstand' : 'Nächste Runde';
     $('overlay-result').classList.remove('hidden');
+    snd.roundEnd(); // kleine Jingle zum Rundenergebnis
     this._resultIsFinal = last;
   }
 
@@ -202,10 +213,15 @@ export class Game {
   _showFinal(ranking, note) {
     const medals = ['🥇', '🥈', '🥉'];
     $('final-table').innerHTML =
-      ranking.map((r, i) => `<tr class="${r.me ? 'me' : ''}"><td>${medals[i] || (i + 1) + '.'}</td>` +
-        `<td>${esc(r.name)}</td><td>${r.total}</td></tr>`).join('');
+      ranking.map((r, i) => {
+        const medal = i === 0 ? '<span class="medal-gold">🥇</span>' : medals[i] || (i + 1) + '.';
+        const spark = i === 0 ? ' <span class="sparkle">✨</span>' : '';
+        return `<tr class="${r.me ? 'me' : ''}"><td>${medal}</td>` +
+          `<td>${esc(r.name)}${spark}</td><td>${r.total}</td></tr>`;
+      }).join('');
     $('final-note').textContent = note;
     $('overlay-final').classList.remove('hidden');
+    snd.victory(); // Sieg-Fanfare zum Endstand
   }
 
   // ---------- Anzeige der Gegner ----------
@@ -234,7 +250,7 @@ export class Game {
   flip()   { if (this.board) this.board.flipSelected(); }
   hint() {
     if (this.mode !== 'solo' || !this.board || this.board.locked) return;
-    if (this.board.showHint(this.card.solution)) this.hintPenalty += 5;
+    if (this.board.showHint(this.card.solution)) { this.hintPenalty += 5; snd.hint(); }
   }
 
   destroy() {

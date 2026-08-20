@@ -1,10 +1,10 @@
 // Service Worker: App-Hülle vorab speichern, damit Ubongo offline läuft (Solo-Modus).
-const CACHE = 'ubongo-v1';
+const CACHE = 'ubongo-v2';
 const SHELL = [
   '.', 'index.html', 'css/style.css', 'manifest.webmanifest', 'icons/icon.svg',
   'icons/icon-192.png', 'icons/icon-512.png',
   'js/main.js', 'js/game.js', 'js/board.js', 'js/ai.js', 'js/net.js',
-  'js/highscore.js', 'js/cardgen.js', 'js/pieces.js',
+  'js/highscore.js', 'js/cardgen.js', 'js/pieces.js', 'js/sound.js',
 ];
 
 self.addEventListener('install', (e) => {

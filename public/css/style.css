@@ -21,8 +21,50 @@ body {
 .hidden { display: none !important; }
 
 /* ===== Start ===== */
+#screen-start { position: relative; }
+.start-hero, #screen-start .menu, #screen-start .version { position: relative; z-index: 1; }
+
+/* Savannen-Abendstimmung (Inline-SVG) als Hintergrund des Startbildschirms */
+.savanna { position: absolute; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; }
+.savanna-svg { display: block; width: 100%; height: 100%; }
+
+/* Glühwürmchen: wenige, langsam treibende Lichtpunkte */
+.fly { position: absolute; width: 5px; height: 5px; border-radius: 50%;
+  background: #ffe28a; box-shadow: 0 0 9px 3px rgba(255, 212, 116, .7); opacity: .35; }
+.fly:nth-of-type(1) { left: 12%; top: 62%; }
+.fly:nth-of-type(2) { left: 26%; top: 74%; }
+.fly:nth-of-type(3) { left: 44%; top: 58%; }
+.fly:nth-of-type(4) { left: 62%; top: 70%; }
+.fly:nth-of-type(5) { left: 78%; top: 60%; }
+.fly:nth-of-type(6) { left: 88%; top: 78%; }
+.fly:nth-of-type(7) { left: 34%; top: 84%; }
+
 .start-hero { text-align: center; margin-top: 8vh; }
+.logo-wrap { position: relative; display: inline-block; }
+.logo-wrap::before { content: ''; position: absolute; inset: -34px; border-radius: 50%; z-index: -1;
+  background: radial-gradient(circle, rgba(255, 190, 95, .45), rgba(255, 190, 95, 0) 68%); }
 .logo { width: 130px; height: 130px; filter: drop-shadow(0 6px 12px rgba(0,0,0,.4)); }
+
+@media (prefers-reduced-motion: no-preference) {
+  .logo-wrap { animation: floaty 5s ease-in-out infinite; }          /* sanftes Schweben */
+  .logo-wrap::before { animation: logoGlow 4.2s ease-in-out infinite; }
+  .fly { animation: firefly 11s ease-in-out infinite; }
+  .fly:nth-of-type(2) { animation-duration: 13s; animation-delay: -4s; }
+  .fly:nth-of-type(3) { animation-duration: 15s; animation-delay: -8s; }
+  .fly:nth-of-type(4) { animation-duration: 12s; animation-delay: -2s; }
+  .fly:nth-of-type(5) { animation-duration: 16s; animation-delay: -10s; }
+  .fly:nth-of-type(6) { animation-duration: 14s; animation-delay: -6s; }
+  .fly:nth-of-type(7) { animation-duration: 17s; animation-delay: -12s; }
+}
+@keyframes floaty { 50% { transform: translateY(-8px) rotate(1deg); } }
+@keyframes logoGlow { 50% { opacity: .55; transform: scale(1.12); } }
+@keyframes firefly {
+  0%   { transform: translate(0, 0); opacity: 0; }
+  12%  { opacity: .9; }
+  45%  { transform: translate(26px, -34px); opacity: .3; }
+  62%  { opacity: .85; }
+  100% { transform: translate(-14px, -70px); opacity: 0; }
+}
 .title { margin: 6px 0 0; font-size: 54px; letter-spacing: 4px; color: #ffe8b0;
   text-shadow: 0 3px 0 #8c3a10, 0 6px 14px rgba(0,0,0,.5); font-weight: 900; }
 .subtitle { margin: 2px 0 0; color: #ffcf8a; font-size: 17px; font-style: italic; }
@@ -83,6 +125,8 @@ body {
 .game-round { color: #ffcf8a; font-weight: 700; font-size: 15px; }
 .game-timer { margin-left: auto; font-size: 30px; font-weight: 900; color: #ffe8b0; font-variant-numeric: tabular-nums;
   text-shadow: 0 2px 4px rgba(0,0,0,.5); }
+.btn-snd { width: 40px; min-width: 40px; height: 40px; font-size: 19px; }
+.btn-snd.off { opacity: .5; filter: grayscale(1); }
 .game-timer.low { color: #ff7b6b; animation: pulse 1s infinite; }
 @keyframes pulse { 50% { transform: scale(1.12); } }
 .timer-bar { flex-shrink: 0; height: 7px; background: rgba(0,0,0,.35); margin: 2px 12px 6px; border-radius: 4px; overflow: hidden; }
@@ -112,8 +156,19 @@ body {
   text-shadow: 0 4px 0 #a8540f, 0 10px 30px rgba(0,0,0,.7); transform: rotate(-6deg); animation: shout .5s ease; }
 @keyframes shout { 0% { transform: scale(.2) rotate(-30deg); } 70% { transform: scale(1.15) rotate(-4deg); } 100% { transform: scale(1) rotate(-6deg); } }
 .result-card { background: linear-gradient(180deg, #fff7e6, #ffedcc); border-radius: 20px; padding: 20px;
-  width: min(92%, 420px); box-shadow: 0 12px 40px rgba(0,0,0,.5); text-align: center; max-height: 86%; overflow-y: auto; }
+  width: min(92%, 420px); text-align: center; max-height: 86%; overflow-y: auto;
+  border: 1px solid rgba(255, 211, 77, .55);                       /* warmer Glüh-Akzent */
+  box-shadow: 0 12px 40px rgba(0,0,0,.5), 0 0 70px rgba(245, 166, 35, .3), inset 0 1px 0 #fff; }
 .result-card h3 { margin: 0 0 12px; font-size: 24px; color: #7a2e0e; }
+/* Pulsierende Sieger-Medaille + Funkeln im Endstand */
+.medal-gold, .sparkle { display: inline-block; }
+.sparkle { font-size: .85em; opacity: .8; }
+@media (prefers-reduced-motion: no-preference) {
+  .medal-gold { animation: medalPulse 1.8s ease-in-out infinite; }
+  .sparkle { animation: sparkle 1.5s ease-in-out infinite; }
+}
+@keyframes medalPulse { 50% { transform: scale(1.28) rotate(-8deg); } }
+@keyframes sparkle { 0%, 100% { opacity: .3; transform: scale(.8); } 50% { opacity: 1; transform: scale(1.12); } }
 .result-table, .score-table { width: 100%; border-collapse: collapse; font-size: 15.5px; }
 .result-table td, .result-table th, .score-table td, .score-table th { padding: 8px 6px; border-bottom: 1px solid #ecd9b4; text-align: left; }
 .result-table td:last-child, .score-table td:last-child { text-align: right; font-weight: 800; }
