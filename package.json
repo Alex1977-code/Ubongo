@@ -1,0 +1,15 @@
+{
+  "name": "ubongo",
+  "version": "1.0.0",
+  "description": "Ubongo als Handy-App (PWA) mit Mehrspieler-Modus, KI-Gegnern und Highscores",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node test/cardgen.test.js && node test/server.test.js"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}
