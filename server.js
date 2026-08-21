@@ -122,7 +122,9 @@ function finishRound(room) {
     room.finalMsg = { t: 'final', ranking, highscores };
     broadcast(room, room.finalMsg);
   } else {
-    setTimeout(() => { if (rooms.has(room.code) && room.state === 'between') startRound(room); }, 10000);
+    // Hat jemand nicht gelöst, bekommt er länger Zeit, sich die Lösung anzusehen
+    const anyDnf = room.players.some(p => p.ms === null);
+    setTimeout(() => { if (rooms.has(room.code) && room.state === 'between') startRound(room); }, anyDnf ? 18000 : 10000);
   }
 }
 

@@ -259,6 +259,9 @@ body {
 
 .btn:disabled { opacity: .55; pointer-events: none; }
 
+.solution-note { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.solution-note-row { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
+#solution-next { font-size: 15px; padding: 9px 18px; }
 .solution-note { position: absolute; top: calc(112px + env(safe-area-inset-top)); left: 50%;
   transform: translateX(-50%); z-index: 15; background: rgba(40, 14, 3, .92); color: #ffd34d;
   font-weight: 800; font-size: 15px; padding: 10px 18px; border-radius: 22px; white-space: nowrap;
