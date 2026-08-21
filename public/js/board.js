@@ -68,34 +68,53 @@ export class BoardView {
   }
 
   _layoutTray() {
-    const free = this.pieces.filter(p => !p.placed && !p.drag);
+    // Feste Slots: Jedes Teil hat einen quadratischen Stammplatz in der Größe
+    // seiner längsten Seite. Drehen/Spiegeln ändert die Slot-Anordnung nie –
+    // das Teil wird nur innerhalb seines Slots zentriert (kein Wackeln).
     const availH = this.h - this.trayTop - 10;
+    const sizes = this.pieces.map(p => {
+      const b = bounds(p.base);
+      return Math.max(b.w, b.h);
+    });
     let tc = Math.min(this.cell * 0.62, 34);
-    for (; tc >= 14; tc -= 2) {
-      const gap = 14;
+    for (; tc >= 12; tc -= 2) {
+      const gap = 10;
       let x = 10, y = 0, rowH = 0;
       const pos = [];
-      for (const p of free) {
-        const b = bounds(this.cells(p));
-        const w = b.w * tc, h = b.h * tc;
-        if (x + w > this.w - 10 && x > 10) { x = 10; y += rowH + gap; rowH = 0; }
-        pos.push({ p, x, y, w, h });
-        x += w + gap; rowH = Math.max(rowH, h);
+      for (let i = 0; i < this.pieces.length; i++) {
+        const s = sizes[i] * tc;
+        if (x + s > this.w - 10 && x > 10) { x = 10; y += rowH + gap; rowH = 0; }
+        pos.push({ p: this.pieces[i], x, y, s });
+        x += s + gap; rowH = Math.max(rowH, s);
       }
       const total = y + rowH;
-      if (total <= availH || tc <= 14) {
+      if (total <= availH || tc <= 12) {
         const offY = this.trayTop + Math.max(0, (availH - total) / 2);
         // Zeilen horizontal zentrieren
         const rows = new Map();
         for (const e of pos) { if (!rows.has(e.y)) rows.set(e.y, []); rows.get(e.y).push(e); }
         for (const row of rows.values()) {
           const last = row[row.length - 1];
-          const shift = (this.w - 10 - (last.x + last.w)) / 2;
-          for (const e of row) { e.p.tray = { x: e.x + shift, y: e.y + offY, cell: tc }; }
+          const shift = (this.w - 10 - (last.x + last.s)) / 2;
+          for (const e of row) { e.p.slot = { x: e.x + shift, y: e.y + offY, px: e.s, cell: tc }; }
         }
         this.trayCell = tc;
+        this._updateTrayOrigins();
         return;
       }
+    }
+  }
+
+  // Zeichen-/Treffer-Ursprung jedes Teils: zentriert im festen Slot.
+  _updateTrayOrigins() {
+    for (const p of this.pieces) {
+      if (!p.slot) continue;
+      const b = bounds(this.cells(p));
+      p.tray = {
+        x: p.slot.x + (p.slot.px - b.w * p.slot.cell) / 2,
+        y: p.slot.y + (p.slot.px - b.h * p.slot.cell) / 2,
+        cell: p.slot.cell,
+      };
     }
   }
 
@@ -361,7 +380,19 @@ export class BoardView {
         this._drawPiece(p, ox, oy, c, sel);
       }
     }
-    // Ablage-Teile
+    // Stammplätze in der Ablage dezent andeuten
+    for (const p of this.pieces) {
+      if (!p.slot) continue;
+      ctx.save();
+      ctx.fillStyle = 'rgba(30, 10, 2, .18)';
+      ctx.strokeStyle = 'rgba(255, 214, 150, .12)';
+      ctx.lineWidth = 1.5;
+      this._rr(ctx, p.slot.x - 4, p.slot.y - 4, p.slot.px + 8, p.slot.px + 8, 9);
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
+    }
+    // Ablage-Teile (jedes zentriert in seinem festen Slot)
     for (const p of this.pieces) {
       if (p.placed || p.drag) continue;
       this._drawPiece(p, p.tray.x, p.tray.y, p.tray.cell, p.id === this.selectedId);

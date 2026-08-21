@@ -91,7 +91,6 @@ $('game-exit').addEventListener('click', () => {
   if (net) net.send({ t: 'leave' });
   endGame('start');
 });
-$('ctrl-rotate').addEventListener('click', () => game && game.rotate());
 $('ctrl-flip').addEventListener('click', () => game && game.flip());
 $('ctrl-solution').addEventListener('click', () => game && game.hint());
 $('result-next').addEventListener('click', () => game && game.nextRound());
