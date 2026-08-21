@@ -68,6 +68,8 @@ export class Game {
     this.card = generateCard(seed, this.o.difficulty, this.roundPieces);
     $('game-round').textContent = `Runde ${this.round}/${this.o.rounds}`;
     document.querySelectorAll('.fly-gem').forEach(el => el.remove());
+    if (this._solTimer) { clearTimeout(this._solTimer); this._solTimer = null; }
+    $('solution-next').onclick = null;
     $('solution-note').classList.add('hidden');
     $('overlay-result').classList.add('hidden');
     $('overlay-final').classList.add('hidden');
@@ -214,17 +216,23 @@ export class Game {
     else showRes();
   }
 
-  // Konnte der Spieler nicht lösen, wird die fertige Lösung ein paar Sekunden
-  // auf dem Brett gezeigt, bevor das Rundenergebnis erscheint.
+  // Konnte der Spieler nicht lösen, bleibt die fertige Lösung auf dem Brett
+  // liegen, bis er sie mit "Gesehen – weiter" bestätigt. Im Online-Modus
+  // taktet der Server die nächste Runde, daher gibt es dort eine Obergrenze.
   _showSolution(then) {
     const startedRound = this.round;
     if (!this.board || !this.card.solution) { then(); return; }
     this.board.reveal(this.card.solution);
     $('solution-note').classList.remove('hidden');
-    setTimeout(() => {
+    const btn = $('solution-next');
+    const done = () => {
+      if (this._solTimer) { clearTimeout(this._solTimer); this._solTimer = null; }
+      btn.onclick = null;
       $('solution-note').classList.add('hidden');
       if (!this.destroyed && this.round === startedRound) then();
-    }, 3600);
+    };
+    btn.onclick = done;
+    if (this.mode === 'online') this._solTimer = setTimeout(done, 12000);
   }
 
   // Gewonnene Edelsteine fallen sichtbar aufs Spielfeld und fliegen dann in

@@ -153,9 +153,15 @@ try {
   await p.waitForSelector('#solution-note:not(.hidden)', { timeout: 4000 });
   const revealed = await p.evaluate(() => window.__ubongo.game.board.pieces.every(q => q.placed));
   assert(revealed, 'Nicht gelöst: Lösung liegt komplett auf dem Brett');
-  await p.waitForSelector('#overlay-result:not(.hidden)', { timeout: 9000 });
+  await p.waitForTimeout(4500); // ohne Bestätigung bleibt die Lösung liegen (solo)
+  const stillThere = await p.evaluate(() =>
+    !document.getElementById('solution-note').classList.contains('hidden') &&
+    document.getElementById('overlay-result').classList.contains('hidden'));
+  assert(stillThere, 'Lösung wartet auf Bestätigung (kein Auto-Weiter im Solo)');
+  await p.click('#solution-next');
+  await p.waitForSelector('#overlay-result:not(.hidden)', { timeout: 6000 });
   const noteHidden = await p.evaluate(() => document.getElementById('solution-note').classList.contains('hidden'));
-  assert(noteHidden, 'Lösungs-Hinweis verschwindet vor dem Ergebnis');
+  assert(noteHidden, 'Nach Bestätigung: Hinweis weg, Ergebnis da');
   await p.click('#result-next');
   await p.waitForSelector('#overlay-final:not(.hidden)');
   await p.click('#final-menu');
