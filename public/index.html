@@ -21,11 +21,18 @@
       <svg class="savanna-svg" viewBox="0 0 390 780" preserveAspectRatio="xMidYMax slice">
         <defs>
           <linearGradient id="sv-sky" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0" stop-color="#2b0d02"/>
-            <stop offset=".38" stop-color="#6b2a0c"/>
-            <stop offset=".62" stop-color="#a34413"/>
-            <stop offset=".78" stop-color="#cc5f1c"/>
-            <stop offset="1" stop-color="#e8862a"/>
+            <stop offset="0" stop-color="#23092f"/>
+            <stop offset=".16" stop-color="#471232"/>
+            <stop offset=".36" stop-color="#6b2410"/>
+            <stop offset=".56" stop-color="#a34413"/>
+            <stop offset=".72" stop-color="#cc5f1c"/>
+            <stop offset=".86" stop-color="#e8862a"/>
+            <stop offset="1" stop-color="#f9a53a"/>
+          </linearGradient>
+          <linearGradient id="sv-ray" x1="0" y1="1" x2="0" y2="0">
+            <stop offset="0" stop-color="#ffd98f" stop-opacity=".32"/>
+            <stop offset=".6" stop-color="#ffd98f" stop-opacity=".1"/>
+            <stop offset="1" stop-color="#ffd98f" stop-opacity="0"/>
           </linearGradient>
           <radialGradient id="sv-glow" cx=".5" cy=".5" r=".5">
             <stop offset="0" stop-color="#ffd98f" stop-opacity=".65"/>
@@ -53,6 +60,13 @@
           <circle cx="348" cy="96" r="1.5" opacity=".6"/>
           <circle cx="74" cy="128" r="1.2" opacity=".4"/>
           <circle cx="256" cy="118" r="1" opacity=".35"/>
+        </g>
+        <!-- Zarte Lichtstrahlen der tiefstehenden Sonne -->
+        <g>
+          <polygon points="252,588 150,196 196,190" fill="url(#sv-ray)"/>
+          <polygon points="252,588 238,130 282,132" fill="url(#sv-ray)"/>
+          <polygon points="252,588 330,180 368,196" fill="url(#sv-ray)"/>
+          <polygon points="252,588 74,300 96,272" fill="url(#sv-ray)"/>
         </g>
         <!-- Tiefstehende Sonne mit warmem Glühen -->
         <circle cx="252" cy="590" r="150" fill="url(#sv-glow)"/>
@@ -119,6 +133,7 @@
       <span class="fly"></span><span class="fly"></span><span class="fly"></span>
       <span class="fly"></span>
     </div>
+    <button class="btn btn-back btn-design" id="open-design" aria-label="Design wählen">🎨</button>
     <div class="start-hero">
       <div class="logo-wrap">
         <svg class="logo" viewBox="0 0 120 120" aria-hidden="true">
@@ -143,6 +158,27 @@
       <button class="btn btn-big" data-goto="help">❓ Anleitung</button>
     </nav>
     <p class="version">v1.0</p>
+
+    <!-- Design-Menü: Thema + Teile-Look (Auswahl wird gespeichert) -->
+    <div class="overlay hidden" id="overlay-design">
+      <div class="result-card design-card">
+        <h3>🎨 Design</h3>
+        <p class="field-label">Thema</p>
+        <div class="chips" id="design-theme">
+          <button class="chip active" data-val="savanne">Savanne</button>
+          <button class="chip" data-val="dschungel">Dschungel<small>bei Nacht</small></button>
+          <button class="chip" data-val="wueste">Wüste</button>
+        </div>
+        <p class="field-label">Teile-Look</p>
+        <div class="chips" id="design-skin">
+          <button class="chip active" data-val="klassisch">Klassisch</button>
+          <button class="chip" data-val="juwelen">Juwelen</button>
+          <button class="chip" data-val="bonbon">Bonbon</button>
+          <button class="chip" data-val="holz">Holz</button>
+        </div>
+        <button class="btn btn-big btn-primary" id="design-close">Fertig</button>
+      </div>
+    </div>
   </section>
 
   <!-- ===== Solo-Setup ===== -->
@@ -272,11 +308,14 @@
       <button class="btn btn-ctrl btn-ctrl-small" id="ctrl-solution">💡</button>
     </div>
 
-    <div class="solution-note hidden" id="solution-note">🧩 Zeit um – so wäre es gegangen:</div>
+    <div class="solution-note hidden" id="solution-note"><img id="note-mascot" class="mascot-note hidden" alt="">🧩 Zeit um – so wäre es gegangen:</div>
 
     <div class="overlay hidden" id="overlay-countdown"><div class="countdown" id="countdown-num">3</div></div>
 
-    <div class="overlay hidden" id="overlay-solved"><div class="ubongo-shout">UBONGO!</div></div>
+    <div class="overlay overlay-shout hidden" id="overlay-solved">
+      <img id="shout-mascot" class="mascot-shout hidden" alt="">
+      <div class="ubongo-shout">UBONGO!</div>
+    </div>
 
     <div class="overlay hidden" id="overlay-result">
       <div class="result-card">
@@ -289,7 +328,7 @@
 
     <div class="overlay hidden" id="overlay-final">
       <div class="result-card">
-        <h3>🏆 Endstand</h3>
+        <h3 class="final-head"><img id="final-mascot" class="mascot-img hidden" alt=""><span>🏆 Endstand</span></h3>
         <table class="result-table" id="final-table"></table>
         <p class="status" id="final-note"></p>
         <button class="btn btn-big btn-primary" id="final-again">Nochmal spielen</button>

@@ -2,6 +2,7 @@
 // Ziehen = bewegen · Tippen = auswählen, erneut tippen = drehen · Einrasten am Raster.
 
 import { PIECE_MAP, transform, bounds } from './pieces.js';
+import { asset } from './assets.js';
 import * as snd from './sound.js';
 
 const K = (x, y) => x + ',' + y;
@@ -11,6 +12,18 @@ function shade(hex, f) { // Farbe aufhellen (f>0) oder abdunkeln (f<0)
   const ch = (v) => Math.max(0, Math.min(255, Math.round(v + (f > 0 ? (255 - v) * f : v * f))));
   return `rgb(${ch(n >> 16)},${ch((n >> 8) & 255)},${ch(n & 255)})`;
 }
+
+function mix(hexA, hexB, f) { // zwei Farben mischen (f = Anteil von B)
+  const a = parseInt(hexA.slice(1), 16), b = parseInt(hexB.slice(1), 16);
+  const ch = (sh) => Math.round(((a >> sh) & 255) * (1 - f) + ((b >> sh) & 255) * f);
+  return '#' + ((ch(16) << 16) | (ch(8) << 8) | ch(0)).toString(16).padStart(6, '0');
+}
+
+// Teile-Look (Design-Menü): klassisch | juwelen | bonbon | holz –
+// rein prozedural gezeichnet, wirkt ab der nächsten Zeichnung.
+const SKINS = ['klassisch', 'juwelen', 'bonbon', 'holz'];
+let PIECE_SKIN = 'klassisch';
+export function setPieceSkin(s) { PIECE_SKIN = SKINS.includes(s) ? s : 'klassisch'; }
 
 export class BoardView {
   constructor(canvas, card, { onSolved, onPlace } = {}) {
@@ -29,6 +42,7 @@ export class BoardView {
       rot: 0, flip: 0, placed: null, tray: { x: 0, y: 0 }, drag: null,
     }));
     this._raf = 0;
+    this.reduceMotion = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
     this._onResize = () => this.layout();
     window.addEventListener('resize', this._onResize);
 
@@ -425,11 +439,15 @@ export class BoardView {
       ctx2.shadowBlur = 16;
       ctx2.shadowOffsetY = 10;
       const px = dp.drag.x + dp.drag.ox, py = dp.drag.y + dp.drag.oy;
-      // Einrast-Vorschau (gleiche Logik wie beim Ablegen, inkl. Einrast-Hilfe)
+      // Einrast-Vorschau mit sanftem Glow-Puls (bei reduced-motion statisch)
       const snap = this._snapPos(dp, px, py);
       if (snap) {
+        const pulse = this.reduceMotion ? 0 : Math.sin(performance.now() / 170);
         ctx2.save();
-        ctx2.globalAlpha = .35;
+        ctx2.globalAlpha = .34 + .12 * pulse;
+        ctx2.shadowColor = 'rgba(255, 235, 170, .9)';
+        ctx2.shadowBlur = 12 + 5 * pulse;
+        ctx2.shadowOffsetY = 0;
         for (const [cx, cy] of this.cells(dp)) {
           ctx2.fillStyle = '#ffffff';
           this._rr(ctx2, this.bx + (cx + snap.gx) * c + 3, this.by + (cy + snap.gy) * c + 3, c - 6, c - 6, 6);
@@ -443,10 +461,13 @@ export class BoardView {
   }
 
   // Holz-Sockel hinter der Karte – lässt die Karte plastischer wirken.
+  // Liegt img/wood.png vor, wird es als Textur genutzt; die abgedunkelten
+  // Ränder und die warme Lichtkante bleiben in beiden Fällen erhalten.
   _drawWoodPanel(ctx, c) {
     const bw = this.cardBounds.w * c, bh = this.cardBounds.h * c;
     const pad = Math.min(14, c * 0.34);
     const x = this.bx - pad, y = this.by - pad, w = bw + pad * 2, h = bh + pad * 2;
+    const tex = asset('wood');
 
     ctx.save();
     ctx.shadowColor = 'rgba(0,0,0,.38)';
@@ -461,21 +482,42 @@ export class BoardView {
     ctx.fill();
     ctx.restore();
 
-    ctx.save();
-    // Dezente Maserung (deterministisch, kein Flackern)
-    ctx.globalAlpha = 0.13;
-    ctx.strokeStyle = '#3a1a06';
-    ctx.lineWidth = 1.2;
-    ctx.beginPath();
-    const lines = Math.max(3, Math.round(h / 24));
-    for (let i = 1; i <= lines; i++) {
-      const ly = y + (h * i) / (lines + 1);
-      ctx.moveTo(x + 5, ly);
-      for (let lx = 0; lx <= w - 10; lx += 10) {
-        ctx.lineTo(x + 5 + lx, ly + Math.sin((lx + i * 53) / 26) * 1.6);
-      }
+    if (tex) {
+      // Textur formatfüllend (cover) in den abgerundeten Sockel zeichnen
+      ctx.save();
+      this._rr(ctx, x, y, w, h, 12);
+      ctx.clip();
+      const sc = Math.max(w / tex.width, h / tex.height);
+      const dw = tex.width * sc, dh = tex.height * sc;
+      ctx.drawImage(tex, x + (w - dw) / 2, y + (h - dh) / 2, dw, dh);
+      // Ränder abdunkeln, damit der Sockel plastisch bleibt
+      const edge = ctx.createLinearGradient(0, y, 0, y + h);
+      edge.addColorStop(0, 'rgba(50, 20, 4, .22)');
+      edge.addColorStop(0.35, 'rgba(0, 0, 0, 0)');
+      edge.addColorStop(0.75, 'rgba(0, 0, 0, .08)');
+      edge.addColorStop(1, 'rgba(25, 8, 0, .34)');
+      ctx.fillStyle = edge;
+      ctx.fillRect(x, y, w, h);
+      ctx.restore();
     }
-    ctx.stroke();
+
+    ctx.save();
+    if (!tex) {
+      // Dezente Maserung (deterministisch, kein Flackern)
+      ctx.globalAlpha = 0.13;
+      ctx.strokeStyle = '#3a1a06';
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      const lines = Math.max(3, Math.round(h / 24));
+      for (let i = 1; i <= lines; i++) {
+        const ly = y + (h * i) / (lines + 1);
+        ctx.moveTo(x + 5, ly);
+        for (let lx = 0; lx <= w - 10; lx += 10) {
+          ctx.lineTo(x + 5 + lx, ly + Math.sin((lx + i * 53) / 26) * 1.6);
+        }
+      }
+      ctx.stroke();
+    }
     // Warme Lichtkante
     ctx.globalAlpha = 0.22;
     ctx.strokeStyle = '#ffd9a0';
@@ -490,28 +532,104 @@ export class BoardView {
     const cells = this.cells(p);
     const has = new Set(cells.map(([x, y]) => K(x, y)));
     const g = Math.max(1, c * 0.03); // Fuge zwischen Teilen
+    const skin = PIECE_SKIN;
+    // Holz-Look: Teil-Farbe gedeckt ins Bräunliche gemischt (bleibt unterscheidbar)
+    const col = skin === 'holz' ? mix(p.color, '#8a5a2b', 0.55) : p.color;
+    const rad = skin === 'bonbon' ? 0.3 : skin === 'juwelen' ? 0.14 : 0.18;
 
     for (const [x, y] of cells) {
       const px = ox + x * c, py = oy + y * c;
       const n = has.has(K(x, y - 1)), s = has.has(K(x, y + 1)),
             w = has.has(K(x - 1, y)), e = has.has(K(x + 1, y));
-      // Grundfläche mit Verlauf
+      // Grundfläche mit Verlauf (je nach Teile-Look)
       const grad = ctx.createLinearGradient(px, py, px, py + c);
-      grad.addColorStop(0, shade(p.color, 0.22));
-      grad.addColorStop(1, shade(p.color, -0.12));
+      if (skin === 'juwelen') {
+        grad.addColorStop(0, shade(col, 0.55));
+        grad.addColorStop(0.45, shade(col, 0.08));
+        grad.addColorStop(1, shade(col, -0.22));
+      } else if (skin === 'bonbon') {
+        grad.addColorStop(0, shade(col, 0.42));
+        grad.addColorStop(0.55, col);
+        grad.addColorStop(1, shade(col, -0.3));
+      } else if (skin === 'holz') {
+        grad.addColorStop(0, shade(col, 0.14));
+        grad.addColorStop(1, shade(col, -0.14));
+      } else {
+        grad.addColorStop(0, shade(col, 0.22));
+        grad.addColorStop(1, shade(col, -0.12));
+      }
       ctx.fillStyle = grad;
       const x0 = px + (w ? 0 : g), y0 = py + (n ? 0 : g);
       const x1 = px + c - (e ? 0 : g), y1 = py + c - (s ? 0 : g);
-      this._rrEdges(ctx, x0, y0, x1 - x0, y1 - y0, c * 0.18, !n && !w, !n && !e, !s && !e, !s && !w);
+      if (skin === 'juwelen') ctx.globalAlpha = 0.84; // leicht durchscheinender Kristall
+      this._rrEdges(ctx, x0, y0, x1 - x0, y1 - y0, c * rad, !n && !w, !n && !e, !s && !e, !s && !w);
       ctx.fill();
-      // Glanzkante oben / Schattenkante unten
-      if (!n) { ctx.fillStyle = 'rgba(255,255,255,.42)'; ctx.fillRect(x0 + c * .12, y0 + g, (x1 - x0) - c * .24, c * .1); }
-      if (!s) { ctx.fillStyle = 'rgba(0,0,0,.2)'; ctx.fillRect(x0 + c * .12, y1 - g - c * .09, (x1 - x0) - c * .24, c * .09); }
+      if (skin === 'juwelen') ctx.globalAlpha = 1;
+
+      // Kanten-Licht je Teile-Look
+      if (skin === 'bonbon') {
+        // breites, weiches Top-Highlight (Hochglanz-Bonbon)
+        if (!n) {
+          ctx.fillStyle = 'rgba(255,255,255,.44)';
+          this._rr(ctx, x0 + (x1 - x0) * .08, y0 + g + c * .04, (x1 - x0) * .84, c * .17, c * .085); ctx.fill();
+          ctx.fillStyle = 'rgba(255,255,255,.16)';
+          this._rr(ctx, x0 + (x1 - x0) * .08, y0 + g + c * .04, (x1 - x0) * .84, c * .3, c * .085); ctx.fill();
+        }
+        if (!s) { ctx.fillStyle = 'rgba(0,0,0,.24)'; ctx.fillRect(x0 + c * .14, y1 - g - c * .08, (x1 - x0) - c * .28, c * .08); }
+      } else if (skin === 'holz') {
+        // matte Kanten + feine Maserungslinien (deterministisch je Zelle)
+        if (!n) { ctx.fillStyle = 'rgba(255,244,220,.16)'; ctx.fillRect(x0 + c * .12, y0 + g, (x1 - x0) - c * .24, c * .07); }
+        if (!s) { ctx.fillStyle = 'rgba(30,14,2,.18)'; ctx.fillRect(x0 + c * .12, y1 - g - c * .07, (x1 - x0) - c * .24, c * .07); }
+        ctx.strokeStyle = 'rgba(52, 26, 6, .24)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        for (let li = 1; li <= 2; li++) {
+          const ly = py + c * (0.32 * li + 0.08);
+          const wob = ((x * 7 + y * 13 + li * 5) % 5) - 2;
+          ctx.moveTo(x0 + 2, ly);
+          ctx.quadraticCurveTo(px + c / 2, ly + wob, x1 - 2, ly);
+        }
+        ctx.stroke();
+      } else if (skin === 'juwelen') {
+        if (!n) { ctx.fillStyle = 'rgba(255,255,255,.55)'; ctx.fillRect(x0 + c * .16, y0 + g, (x1 - x0) - c * .32, c * .08); }
+        if (!s) { ctx.fillStyle = 'rgba(0,0,0,.22)'; ctx.fillRect(x0 + c * .14, y1 - g - c * .09, (x1 - x0) - c * .28, c * .09); }
+      } else {
+        // Klassisch: Glanzkante oben / Schattenkante unten
+        if (!n) { ctx.fillStyle = 'rgba(255,255,255,.42)'; ctx.fillRect(x0 + c * .12, y0 + g, (x1 - x0) - c * .24, c * .1); }
+        if (!s) { ctx.fillStyle = 'rgba(0,0,0,.2)'; ctx.fillRect(x0 + c * .12, y1 - g - c * .09, (x1 - x0) - c * .24, c * .09); }
+      }
       // Innere Rasterlinien (Einheitsquadrate sichtbar machen)
       ctx.strokeStyle = 'rgba(0,0,0,.13)';
       ctx.lineWidth = 1;
       if (e) { ctx.beginPath(); ctx.moveTo(px + c, py + 2); ctx.lineTo(px + c, py + c - 2); ctx.stroke(); }
       if (s) { ctx.beginPath(); ctx.moveTo(px + 2, py + c); ctx.lineTo(px + c - 2, py + c); ctx.stroke(); }
+    }
+
+    // Juwelen-Look: heller Kern, kräftiges Glanzlicht und kleiner Funkelpunkt
+    if (skin === 'juwelen') {
+      const b = bounds(cells);
+      ctx.save();
+      ctx.beginPath();
+      for (const [x, y] of cells) ctx.rect(ox + x * c + g, oy + y * c + g, c - 2 * g, c - 2 * g);
+      ctx.clip();
+      const cxp = ox + b.w * c * 0.36, cyp = oy + b.h * c * 0.3;
+      const core = ctx.createRadialGradient(cxp, cyp, 0, cxp, cyp, Math.max(b.w, b.h) * c * 0.55);
+      core.addColorStop(0, 'rgba(255,255,255,.34)');
+      core.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = core;
+      ctx.fillRect(ox, oy, b.w * c, b.h * c);
+      ctx.globalAlpha = 0.5;
+      ctx.fillStyle = '#fff';
+      ctx.beginPath();
+      ctx.ellipse(cxp - c * 0.06, cyp - c * 0.16, c * 0.34, c * 0.13, -0.5, 0, Math.PI * 2);
+      ctx.fill();
+      const [fx0, fy0] = cells[0];
+      const fx = ox + fx0 * c + c * 0.72, fy = oy + fy0 * c + c * 0.26;
+      ctx.globalAlpha = 0.35;
+      ctx.beginPath(); ctx.arc(fx, fy, c * 0.09, 0, Math.PI * 2); ctx.fill();
+      ctx.globalAlpha = 0.95;
+      ctx.beginPath(); ctx.arc(fx, fy, c * 0.045, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
     }
     // Umriss
     ctx.strokeStyle = selected ? '#fff' : 'rgba(30,10,0,.45)';

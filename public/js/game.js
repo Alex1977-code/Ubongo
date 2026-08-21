@@ -5,7 +5,8 @@ import { generateCard, DIFFICULTIES, roundSetup } from './cardgen.js';
 import { BoardView } from './board.js';
 import { makeBots, newRound, botProgress, botTick } from './ai.js';
 import { addLocalScore, recordSolve, recordMatch } from './highscore.js';
-import { roundGems, gemPoints, gemSVG, gemRow } from './gems.js';
+import { roundGems, gemPoints, gemHTML, gemRow } from './gems.js';
+import { assetURL } from './assets.js';
 import * as snd from './sound.js';
 
 const $ = (id) => document.getElementById(id);
@@ -247,7 +248,7 @@ export class Game {
     gems.forEach((type, i) => {
       const el = document.createElement('div');
       el.className = 'fly-gem';
-      el.innerHTML = gemSVG(type, size);
+      el.innerHTML = gemHTML(type, size);
       const x = bRect.left - sRect.left + bRect.width * (0.28 + 0.44 * Math.random());
       const yLand = bRect.top - sRect.top + this.board.by + this.board.cardBounds.h * this.board.cell * 0.45;
       el.style.left = (x - size / 2) + 'px';
@@ -349,6 +350,19 @@ export class Game {
   }
 
   _showFinal(ranking, note) {
+    const won = !!ranking[0]?.me;
+    // Maskottchen-Reaktion: Sieg/Trost-Bild, sonst das allgemeine Maskottchen
+    const mascot = $('final-mascot');
+    const mSrc = assetURL(won ? 'mascot-sieg' : 'mascot-trost') || assetURL('mascot');
+    if (mSrc) { mascot.src = mSrc; mascot.classList.remove('hidden'); }
+    else mascot.classList.add('hidden');
+    // Sieger-Szene als Hintergrund der Ergebnistafel (nur bei Sieg + Asset)
+    const card = $('overlay-final').querySelector('.result-card');
+    const scene = won && assetURL('sieg-szene');
+    card.classList.toggle('scene', !!scene);
+    card.style.backgroundImage = scene
+      ? `linear-gradient(rgba(24, 8, 0, .55), rgba(24, 8, 0, .68)), url("${scene}")`
+      : '';
     const medals = ['🥇', '🥈', '🥉'];
     $('final-table').innerHTML =
       ranking.map((r, i) => {
@@ -369,7 +383,10 @@ export class Game {
       host.innerHTML = this.bots.map(b => {
         const prog = b.done ? 1 : botProgress(b, elapsed ?? 0, this.roundTime);
         const cls = b.done ? 'done' : (b.solveMs === null && (elapsed ?? 0) > this.roundTime * 900) ? 'dnf' : '';
-        return `<div class="opp ${cls}"><div class="opp-name">${b.emoji} ${esc(b.name)}` +
+        // Bot-Avatar: PNG (img/avatar-N.png), wenn vorhanden – sonst Emoji
+        const avSrc = assetURL('avatar-' + b.avatar);
+        const av = avSrc ? `<img class="opp-avatar" src="${avSrc}" alt="">` : b.emoji;
+        return `<div class="opp ${cls}"><div class="opp-name">${av} ${esc(b.name)}` +
           `<span style="margin-left:auto">${b.done ? '✓ ' + fmt2(b.ms) : ''}</span></div>` +
           `<div class="opp-bar"><div class="opp-fill" style="width:${Math.round(prog * 100)}%"></div></div></div>`;
       }).join('');

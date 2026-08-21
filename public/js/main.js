@@ -3,7 +3,9 @@
 import { Game } from './game.js';
 import { Net } from './net.js';
 import { localScores, onlineScores, getName, setName, getServer, setServer, getStats } from './highscore.js';
-import { gemRow, GEMS } from './gems.js';
+import { gemRow, GEMS, useGemAssets } from './gems.js';
+import { loadAssets, assetURL } from './assets.js';
+import { setPieceSkin } from './board.js';
 import { unlock, isMuted, toggleMuted, isMusicOn, toggleMusic } from './sound.js';
 
 const $ = (id) => document.getElementById(id);
@@ -74,6 +76,63 @@ const soloRounds = chipGroup('solo-rounds');
 const lobbyDiff = chipGroup('lobby-diff', () => sendConfig());
 const lobbyTempo = chipGroup('lobby-tempo', () => sendConfig());
 const lobbyRounds = chipGroup('lobby-rounds', () => sendConfig());
+
+// ---------- Design: Thema + Teile-Look (🎨-Menü auf dem Start) ----------
+const getTheme = () => { try { return localStorage.getItem('ubongo.theme') || 'savanne'; } catch { return 'savanne'; } };
+const getSkin = () => { try { return localStorage.getItem('ubongo.skin') || 'klassisch'; } catch { return 'klassisch'; } };
+
+function applyDesign() {
+  const t = getTheme();
+  document.body.classList.toggle('theme-dschungel', t === 'dschungel');
+  document.body.classList.toggle('theme-wueste', t === 'wueste');
+  setPieceSkin(getSkin());       // wirkt sofort (Canvas zeichnet im rAF-Loop)
+  applyBackgrounds();
+}
+
+// Themen-Hintergründe aus Bild-Assets (falls vorhanden), sonst CSS-Farbwelt
+function applyBackgrounds() {
+  const suffix = getTheme() === 'savanne' ? '' : '-' + getTheme();
+  setBg($('screen-start'), assetURL('bg-menu' + suffix));
+  setBg($('screen-game'), assetURL('bg-game' + suffix));
+}
+function setBg(el, url) {
+  el.classList.toggle('bg-image', !!url);
+  el.style.backgroundImage = url ? `url("${url}")` : '';
+}
+
+chipGroup('design-theme', (v) => { try { localStorage.setItem('ubongo.theme', v); } catch { /* egal */ } applyDesign(); });
+chipGroup('design-skin', (v) => { try { localStorage.setItem('ubongo.skin', v); } catch { /* egal */ } applyDesign(); });
+const syncChips = (id, val) => document.querySelectorAll(`#${id} .chip`)
+  .forEach(c => c.classList.toggle('active', c.dataset.val === val));
+$('open-design').addEventListener('click', () => {
+  syncChips('design-theme', getTheme());
+  syncChips('design-skin', getSkin());
+  $('overlay-design').classList.remove('hidden');
+});
+$('design-close').addEventListener('click', () => $('overlay-design').classList.add('hidden'));
+applyDesign();
+
+// ---------- Bild-Assets (optional, z. B. KI-generiert; Fallback bleibt aktiv) ----------
+loadAssets().then(() => {
+  useGemAssets(t => assetURL('gem-' + t));   // Edelsteine als PNG, sobald vorhanden
+  applyBackgrounds();                        // Hintergründe des aktuellen Themas
+  if (assetURL('emblem')) {                  // Emblem hinter dem UBONGO-Titel
+    const hero = document.querySelector('.start-hero');
+    const im = document.createElement('img');
+    im.className = 'title-emblem';
+    im.src = assetURL('emblem');
+    im.alt = '';
+    hero.insertBefore(im, hero.querySelector('.title'));
+  }
+  if (assetURL('mascot-ubongo')) {           // Maskottchen im „UBONGO!“-Overlay
+    $('shout-mascot').src = assetURL('mascot-ubongo');
+    $('shout-mascot').classList.remove('hidden');
+  }
+  if (assetURL('mascot-trost')) {            // Trost-Maskottchen neben dem Lösungs-Hinweis
+    $('note-mascot').src = assetURL('mascot-trost');
+    $('note-mascot').classList.remove('hidden');
+  }
+});
 
 // Namen vorbelegen und merken
 for (const id of ['solo-name', 'online-name']) {
