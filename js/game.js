@@ -5,6 +5,7 @@ import { generateCard, DIFFICULTIES } from './cardgen.js';
 import { BoardView } from './board.js';
 import { makeBots, newRound, botProgress, botTick } from './ai.js';
 import { addLocalScore } from './highscore.js';
+import { roundGems, gemPoints, gemSVG, gemRow } from './gems.js';
 import * as snd from './sound.js';
 
 const $ = (id) => document.getElementById(id);
@@ -12,9 +13,7 @@ const fmt = (ms) => {
   const s = Math.max(0, Math.ceil(ms / 1000));
   return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
 };
-const RANK_BONUS = [5, 3, 1];
-const points = (rank, msUsed, timeSec) =>
-  10 + (RANK_BONUS[rank] || 0) + Math.floor(Math.max(0, timeSec - msUsed / 1000) / 10);
+const FFWD = 8; // Schnellvorlauf-Faktor, sobald der Spieler gelöst hat
 
 export class Game {
   constructor(opts) {
@@ -23,14 +22,17 @@ export class Game {
     this.diff = DIFFICULTIES[opts.difficulty];
     this.round = 0;
     this.myTotal = 0;
-    this.hintPenalty = 0;
+    this.myGems = [];
+    this.hintUsed = false;
     this.board = null;
     this.timerIv = null;
     this.destroyed = false;
     if (this.mode === 'solo') {
       this.bots = makeBots(opts.botCount, opts.botSkill, this.diff.time);
+      for (const b of this.bots) b.gems = [];
     }
     $('ctrl-solution').classList.toggle('hidden', this.mode !== 'solo');
+    this._renderShelf();
   }
 
   // ---------- Rundenstart ----------
@@ -46,11 +48,12 @@ export class Game {
   _beginRound(seed) {
     if (this.destroyed) return;
     this.round++;
-    this.hintPenalty = 0;
+    this.hintUsed = false;
     this._warned = false;
     this.myMs = null; this.myDone = false;
     this.card = generateCard(seed, this.o.difficulty);
     $('game-round').textContent = `Runde ${this.round}/${this.o.rounds}`;
+    document.querySelectorAll('.fly-gem').forEach(el => el.remove());
     $('overlay-result').classList.add('hidden');
     $('overlay-final').classList.add('hidden');
     $('overlay-solved').classList.add('hidden');
@@ -87,6 +90,8 @@ export class Game {
   _startTimer() {
     this.t0 = performance.now();
     this.endAt = this.t0 + this.diff.time * 1000;
+    this.vElapsed = 0;               // virtuelle Rundenzeit (für Schnellvorlauf)
+    this._lastTick = this.t0;
     clearInterval(this.timerIv);
     this.timerIv = setInterval(() => this._tick(), 120);
     this._tick();
@@ -95,9 +100,22 @@ export class Game {
   _tick() {
     if (this.destroyed) return;
     const now = performance.now();
-    const left = this.endAt - now;
+    let left;
+    let ffwd = false;
+
+    if (this.mode === 'solo') {
+      // Virtuelle Uhr: Sobald der Spieler gelöst hat, läuft die Zeit für die
+      // Computer-Gegner im Schnellvorlauf – keine lange Warterei.
+      ffwd = this.myDone;
+      this.vElapsed += (now - this._lastTick) * (ffwd ? FFWD : 1);
+      this._lastTick = now;
+      left = this.diff.time * 1000 - this.vElapsed;
+    } else {
+      left = this.endAt - now;
+    }
+
     const el = $('game-timer');
-    el.textContent = fmt(left);
+    el.textContent = (ffwd ? '⏩ ' : '') + fmt(left);
     el.classList.toggle('low', left < 15000 && !this.myDone);
     $('timer-fill').style.width = Math.max(0, (left / (this.diff.time * 1000)) * 100) + '%';
 
@@ -107,12 +125,11 @@ export class Game {
     }
 
     if (this.mode === 'solo') {
-      const elapsed = now - this.t0;
-      for (const b of this.bots) botTick(b, elapsed);
+      for (const b of this.bots) botTick(b, this.vElapsed);
       // Runde endet, wenn die Zeit abläuft oder niemand mehr fertig werden kann.
       const pending = !this.myDone || this.bots.some(b => !b.done && b.solveMs !== null);
       if (left <= 0 || !pending) { this._endSoloRound(); return; }
-      this._renderOpponents(elapsed);
+      this._renderOpponents(this.vElapsed);
     } else if (left <= 0 && !this.myDone) {
       this.myDone = true;
       this.board.locked = true;
@@ -125,7 +142,7 @@ export class Game {
   _solved() {
     if (this.myDone) return;
     this.myDone = true;
-    this.myMs = Math.round(performance.now() - this.t0);
+    this.myMs = this.mode === 'solo' ? Math.round(this.vElapsed) : Math.round(performance.now() - this.t0);
     $('overlay-solved').classList.remove('hidden');
     setTimeout(() => $('overlay-solved').classList.add('hidden'), 1600);
     snd.solve(); // UBONGO!-Fanfare
@@ -146,20 +163,75 @@ export class Game {
     ];
     const finished = everyone.filter(p => p.done).sort((a, b) => a.ms - b.ms);
     for (const p of everyone) {
-      p.points = p.done ? points(finished.indexOf(p), p.ms, this.diff.time) : 0;
-      if (p.me) { p.points = Math.max(0, p.points - this.hintPenalty); this.myTotal += p.points; p.total = this.myTotal; }
-      else { p.bot.total += p.points; p.total = p.bot.total; }
+      p.gems = roundGems(finished.indexOf(p), p.done, p.me && this.hintUsed);
+      p.points = gemPoints(p.gems);
+      if (p.me) { this.myTotal += p.points; this.myGems.push(...p.gems); p.total = this.myTotal; }
+      else { p.bot.total += p.points; p.bot.gems.push(...p.gems); p.total = p.bot.total; }
     }
-    this._showRoundResult(everyone, true);
+    const mine = everyone[0];
+    this._celebrateGems(mine.gems, () => this._showRoundResult(everyone, true));
+  }
+
+  // Gewonnene Edelsteine fallen sichtbar aufs Spielfeld und fliegen dann in
+  // die eigene Schatzleiste – erst danach erscheint das Rundenergebnis.
+  _celebrateGems(gems, thenRaw) {
+    const startedRound = this.round;
+    const then = () => { if (!this.destroyed && this.round === startedRound) thenRaw(); };
+    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (!gems || gems.length === 0 || reduce || !this.board) {
+      this._renderShelf();
+      setTimeout(then, gems && gems.length ? 500 : 700);
+      return;
+    }
+    const screen = $('screen-game');
+    const sRect = screen.getBoundingClientRect();
+    const bRect = this.board.canvas.getBoundingClientRect();
+    const shelf = $('gem-shelf');
+    shelf.classList.remove('hidden');
+    const shelfRect = shelf.getBoundingClientRect();
+    const size = 42;
+    gems.forEach((type, i) => {
+      const el = document.createElement('div');
+      el.className = 'fly-gem';
+      el.innerHTML = gemSVG(type, size);
+      const x = bRect.left - sRect.left + bRect.width * (0.28 + 0.44 * Math.random());
+      const yLand = bRect.top - sRect.top + this.board.by + this.board.cardBounds.h * this.board.cell * 0.45;
+      el.style.left = (x - size / 2) + 'px';
+      el.style.top = '0px';
+      screen.appendChild(el);
+      const tx = shelfRect.left - sRect.left + 18 - x;
+      const ty = shelfRect.top - sRect.top + 2;
+      const anim = el.animate([
+        { transform: `translateY(-${size + 20}px) rotate(-40deg)`, opacity: 0.9, offset: 0 },
+        { transform: `translateY(${yLand}px) rotate(8deg)`, opacity: 1, offset: 0.42, easing: 'cubic-bezier(.5,0,1,.6)' },
+        { transform: `translateY(${yLand - 26}px) rotate(-4deg)`, offset: 0.58, easing: 'cubic-bezier(0,.4,.5,1)' },
+        { transform: `translateY(${yLand}px) rotate(0deg)`, offset: 0.72, easing: 'cubic-bezier(.5,0,1,.6)' },
+        { transform: `translateY(${yLand}px) scale(1.06)`, offset: 0.84 },
+        { transform: `translate(${tx}px, ${ty}px) scale(0.45)`, opacity: 0.9, offset: 1, easing: 'cubic-bezier(.4,0,.7,1)' },
+      ], { duration: 1500, delay: i * 180, fill: 'forwards' });
+      anim.onfinish = () => { el.remove(); this._renderShelf(); };
+      setTimeout(() => snd.gem(), 620 + i * 180);
+    });
+    setTimeout(then, 1500 + gems.length * 180 + 200);
+  }
+
+  // Eigene Schatzleiste im Spielfeld (gesammelte Edelsteine + Gesamtwert)
+  _renderShelf() {
+    const shelf = $('gem-shelf');
+    if (!shelf) return;
+    if (!this.myGems || this.myGems.length === 0) { shelf.classList.add('hidden'); shelf.innerHTML = ''; return; }
+    shelf.classList.remove('hidden');
+    shelf.innerHTML = `<span class="shelf-gems">${gemRow(this.myGems, 21)}</span>` +
+      `<span class="shelf-total">= ${this.myTotal}</span>`;
   }
 
   _showRoundResult(results, solo) {
     $('result-title').textContent = `Runde ${this.round} von ${this.o.rounds}`;
     const rows = results.slice().sort((a, b) => (b.points - a.points) || ((a.ms ?? 1e9) - (b.ms ?? 1e9)));
     $('result-table').innerHTML =
-      '<tr><th></th><th>Zeit</th><th>Punkte</th><th>Gesamt</th></tr>' +
+      '<tr><th></th><th>Zeit</th><th>Edelsteine</th><th>Gesamt</th></tr>' +
       rows.map(r => `<tr class="${r.me ? 'me' : ''}"><td>${esc(r.name)}</td>` +
-        `<td>${r.ms != null ? fmt2(r.ms) : '–'}</td><td>+${r.points}</td><td>${r.total}</td></tr>`).join('');
+        `<td>${r.ms != null ? fmt2(r.ms) : '–'}</td><td class="gem-cell">${gemRow(r.gems || [], 17)}</td><td>${r.total}</td></tr>`).join('');
     const last = this.round >= this.o.rounds;
     $('result-next').classList.toggle('hidden', !solo);
     $('result-wait').classList.toggle('hidden', solo);
@@ -177,8 +249,8 @@ export class Game {
 
   _finalSolo() {
     const ranking = [
-      { name: this.o.name, me: true, total: this.myTotal },
-      ...this.bots.map(b => ({ name: `${b.emoji} ${b.name}`, total: b.total })),
+      { name: this.o.name, me: true, total: this.myTotal, gems: this.myGems },
+      ...this.bots.map(b => ({ name: `${b.emoji} ${b.name}`, total: b.total, gems: b.gems })),
     ].sort((a, b) => b.total - a.total);
     addLocalScore({ name: this.o.name, score: this.myTotal, difficulty: this.o.difficulty,
                     date: new Date().toISOString().slice(0, 10) });
@@ -197,15 +269,19 @@ export class Game {
     if (this.board) this.board.locked = true;
     const results = msg.results.map(r => ({
       name: r.name, me: r.id === this.o.net.myId, ms: r.ms, points: r.points, total: r.total,
+      gems: r.gems || [],
     }));
     const mine = results.find(r => r.me);
-    if (mine) this.myTotal = mine.total;
-    this._showRoundResult(results, false);
+    if (mine) {
+      this.myTotal = mine.total;
+      this.myGems.push(...mine.gems);
+    }
+    this._celebrateGems(mine ? mine.gems : [], () => this._showRoundResult(results, false));
   }
 
   onFinal(msg) {
     $('overlay-result').classList.add('hidden');
-    const ranking = msg.ranking.map(r => ({ name: r.name, me: r.id === this.o.net.myId, total: r.total }));
+    const ranking = msg.ranking.map(r => ({ name: r.name, me: r.id === this.o.net.myId, total: r.total, gems: r.gems }));
     this._showFinal(ranking, 'Im Online-Highscore gespeichert! 🌍');
     if (ranking[0]?.me) confetti($('confetti'), 140);
   }
@@ -217,7 +293,7 @@ export class Game {
         const medal = i === 0 ? '<span class="medal-gold">🥇</span>' : medals[i] || (i + 1) + '.';
         const spark = i === 0 ? ' <span class="sparkle">✨</span>' : '';
         return `<tr class="${r.me ? 'me' : ''}"><td>${medal}</td>` +
-          `<td>${esc(r.name)}${spark}</td><td>${r.total}</td></tr>`;
+          `<td>${esc(r.name)}${spark}<div class="gem-cell">${gemRow(r.gems || [], 15)}</div></td><td>${r.total}</td></tr>`;
       }).join('');
     $('final-note').textContent = note;
     $('overlay-final').classList.remove('hidden');
@@ -250,13 +326,16 @@ export class Game {
   flip()   { if (this.board) this.board.flipSelected(); }
   hint() {
     if (this.mode !== 'solo' || !this.board || this.board.locked) return;
-    if (this.board.showHint(this.card.solution)) { this.hintPenalty += 5; snd.hint(); }
+    if (this.board.showHint(this.card.solution)) { this.hintUsed = true; snd.hint(); }
   }
 
   destroy() {
     this.destroyed = true;
     clearInterval(this.timerIv);
     if (this.board) { this.board.destroy(); this.board = null; }
+    document.querySelectorAll('.fly-gem').forEach(el => el.remove());
+    const shelf = $('gem-shelf');
+    if (shelf) { shelf.classList.add('hidden'); shelf.innerHTML = ''; }
     for (const id of ['overlay-countdown', 'overlay-solved', 'overlay-result', 'overlay-final'])
       $(id).classList.add('hidden');
   }
