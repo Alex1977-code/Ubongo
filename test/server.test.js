@@ -44,13 +44,16 @@ try {
   const res = await waitFor('a', 'roundResult');
   const anna = res.results.find(r => r.name === 'Anna');
   const ben = res.results.find(r => r.name === 'Ben');
-  // Anna: 10 + 5 (Erste) + floor(60/10)=6 => 21;  Ben: 10 + 3 + floor(45/10)=4 => 17
-  assert(anna.points === 21, `Anna 21 Punkte, war ${anna.points}`);
-  assert(ben.points === 17, `Ben 17 Punkte, war ${ben.points}`);
+  // Original-Regeln: Erste: Saphir (blau, 3) + 1 Zufallsstein; Zweiter: Bernstein (braun, 1) + 1 Zufallsstein
+  assert(anna.gems.length === 2 && anna.gems[0] === 'saphir', `Anna Saphir+Zufall, war ${JSON.stringify(anna.gems)}`);
+  assert(ben.gems.length === 2 && ben.gems[0] === 'bernstein', `Ben Bernstein+Zufall, war ${JSON.stringify(ben.gems)}`);
+  assert(anna.points >= 4 && anna.points <= 7, `Anna 4-7 Punkte, war ${anna.points}`);
+  assert(ben.points >= 2 && ben.points <= 5, `Ben 2-5 Punkte, war ${ben.points}`);
 
   const fin = await waitFor('a', 'final');
-  assert(fin.ranking[0].name === 'Anna', 'Anna gewinnt');
-  assert(fin.highscores.some(h => h.name === 'Anna' && h.score === 21), 'Highscore gespeichert');
+  assert(fin.ranking.length === 2, 'Endstand mit 2 Spielern');
+  assert(fin.ranking.every(r => r.gems.length === 2), 'Endstand enthält Edelsteine');
+  assert(fin.highscores.some(h => h.name === 'Anna' && h.score === anna.points), 'Highscore gespeichert');
   console.log(fails === 0 ? 'server: alle Tests OK' : `server: ${fails} Fehler`);
 } catch (e) {
   console.error('FAIL:', e.message); fails++;

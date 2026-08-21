@@ -189,3 +189,20 @@ body {
 .help code { background: #f3e2c0; border-radius: 6px; padding: 1px 6px; }
 
 #confetti { position: absolute; inset: 0; pointer-events: none; z-index: 30; width: 100%; height: 100%; }
+
+/* ===== Edelsteine ===== */
+.gem-shelf { display: flex; align-items: center; gap: 8px; margin: 0 12px 6px; padding: 4px 10px;
+  background: linear-gradient(180deg, rgba(25, 8, 1, .55), rgba(25, 8, 1, .35));
+  border: 1px solid rgba(255, 214, 150, .28); border-radius: 12px; flex-shrink: 0; min-height: 31px;
+  box-shadow: inset 0 2px 6px rgba(0,0,0,.4); }
+.shelf-gems { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+.shelf-total { margin-left: auto; color: #ffd34d; font-weight: 900; font-size: 15px;
+  text-shadow: 0 1px 2px rgba(0,0,0,.6); }
+.gem-group { display: inline-flex; align-items: center; gap: 2px; }
+.gem-group b { font-size: 12px; color: inherit; }
+.gem-cell { white-space: nowrap; }
+.gem-cell .gem-group { margin-right: 6px; }
+.gem-none { opacity: .45; }
+.gem { vertical-align: middle; filter: drop-shadow(0 1px 1.5px rgba(0,0,0,.35)); }
+.fly-gem { position: absolute; z-index: 25; pointer-events: none;
+  filter: drop-shadow(0 6px 8px rgba(0,0,0,.45)); }

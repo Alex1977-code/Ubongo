@@ -1,5 +1,5 @@
 // Spielbrett-Ansicht: zeichnet Karte + Teile auf Canvas und verarbeitet Touch-Eingaben.
-// Ziehen = bewegen, Tippen = drehen, Doppeltipp = spiegeln, Einrasten am Raster.
+// Ziehen = bewegen · Tippen = auswählen, erneut tippen = drehen · Einrasten am Raster.
 
 import { PIECE_MAP, transform, bounds } from './pieces.js';
 import * as snd from './sound.js';
@@ -28,7 +28,6 @@ export class BoardView {
       id, i, color: PIECE_MAP[id].color, base: PIECE_MAP[id].cells,
       rot: 0, flip: 0, placed: null, tray: { x: 0, y: 0 }, drag: null,
     }));
-    this._tap = { time: 0, id: null };
     this._raf = 0;
     this._onResize = () => this.layout();
     window.addEventListener('resize', this._onResize);
@@ -37,6 +36,7 @@ export class BoardView {
     canvas.addEventListener('pointermove', e => this._move(e));
     canvas.addEventListener('pointerup', e => this._up(e));
     canvas.addEventListener('pointercancel', e => this._up(e, true));
+    canvas.addEventListener('lostpointercapture', e => this._up(e, true));
 
     this.layout();
     const loop = () => { this.draw(); this._raf = requestAnimationFrame(loop); };
@@ -68,34 +68,53 @@ export class BoardView {
   }
 
   _layoutTray() {
-    const free = this.pieces.filter(p => !p.placed && !p.drag);
+    // Feste Slots: Jedes Teil hat einen quadratischen Stammplatz in der Größe
+    // seiner längsten Seite. Drehen/Spiegeln ändert die Slot-Anordnung nie –
+    // das Teil wird nur innerhalb seines Slots zentriert (kein Wackeln).
     const availH = this.h - this.trayTop - 10;
+    const sizes = this.pieces.map(p => {
+      const b = bounds(p.base);
+      return Math.max(b.w, b.h);
+    });
     let tc = Math.min(this.cell * 0.62, 34);
-    for (; tc >= 14; tc -= 2) {
-      const gap = 14;
+    for (; tc >= 12; tc -= 2) {
+      const gap = 10;
       let x = 10, y = 0, rowH = 0;
       const pos = [];
-      for (const p of free) {
-        const b = bounds(this.cells(p));
-        const w = b.w * tc, h = b.h * tc;
-        if (x + w > this.w - 10 && x > 10) { x = 10; y += rowH + gap; rowH = 0; }
-        pos.push({ p, x, y, w, h });
-        x += w + gap; rowH = Math.max(rowH, h);
+      for (let i = 0; i < this.pieces.length; i++) {
+        const s = sizes[i] * tc;
+        if (x + s > this.w - 10 && x > 10) { x = 10; y += rowH + gap; rowH = 0; }
+        pos.push({ p: this.pieces[i], x, y, s });
+        x += s + gap; rowH = Math.max(rowH, s);
       }
       const total = y + rowH;
-      if (total <= availH || tc <= 14) {
+      if (total <= availH || tc <= 12) {
         const offY = this.trayTop + Math.max(0, (availH - total) / 2);
         // Zeilen horizontal zentrieren
         const rows = new Map();
         for (const e of pos) { if (!rows.has(e.y)) rows.set(e.y, []); rows.get(e.y).push(e); }
         for (const row of rows.values()) {
           const last = row[row.length - 1];
-          const shift = (this.w - 10 - (last.x + last.w)) / 2;
-          for (const e of row) { e.p.tray = { x: e.x + shift, y: e.y + offY, cell: tc }; }
+          const shift = (this.w - 10 - (last.x + last.s)) / 2;
+          for (const e of row) { e.p.slot = { x: e.x + shift, y: e.y + offY, px: e.s, cell: tc }; }
         }
         this.trayCell = tc;
+        this._updateTrayOrigins();
         return;
       }
+    }
+  }
+
+  // Zeichen-/Treffer-Ursprung jedes Teils: zentriert im festen Slot.
+  _updateTrayOrigins() {
+    for (const p of this.pieces) {
+      if (!p.slot) continue;
+      const b = bounds(this.cells(p));
+      p.tray = {
+        x: p.slot.x + (p.slot.px - b.w * p.slot.cell) / 2,
+        y: p.slot.y + (p.slot.px - b.h * p.slot.cell) / 2,
+        cell: p.slot.cell,
+      };
     }
   }
 
@@ -109,11 +128,12 @@ export class BoardView {
       if (this.cells(p).some(([cx, cy]) => cx + p.placed.gx === gx && cy + p.placed.gy === gy)) return p;
     }
     for (const p of this.pieces) {
-      if (p.placed || p.drag) continue;
-      const t = p.tray;
-      if (this.cells(p).some(([cx, cy]) =>
-        x >= t.x + cx * t.cell - 5 && x <= t.x + (cx + 1) * t.cell + 5 &&
-        y >= t.y + cy * t.cell - 5 && y <= t.y + (cy + 1) * t.cell + 5)) return p;
+      if (p.placed || (p.drag && p.drag.moved) || !p.slot) continue;
+      // Ganzer Slot als Treffer-Fläche: Der Stammplatz bewegt sich nie,
+      // dadurch trifft jeder Tipp an derselben Stelle zuverlässig dasselbe
+      // Teil – egal, wie es gerade gedreht ist.
+      const s = p.slot;
+      if (x >= s.x - 4 && x <= s.x + s.px + 4 && y >= s.y - 4 && y <= s.y + s.px + 4) return p;
     }
     return null;
   }
@@ -124,24 +144,55 @@ export class BoardView {
   }
 
   _down(e) {
-    if (this.locked || this.dragPiece) return;
+    if (this.locked) return;
+    // Zweiter Finger während des Ziehens: Teil drehen
+    if (this.dragPiece) {
+      const dp = this.dragPiece;
+      if (dp.drag && e.pointerId !== dp.drag.pointerId) {
+        e.preventDefault();
+        if (dp.drag.moved) {
+          dp.rot = (dp.rot + 1) % 4; // frei in der Hand: einfach drehen
+          snd.rotate();
+        } else {
+          // Teil liegt noch (Brett oder Ablage): über die reguläre
+          // Dreh-Logik, damit nichts illegal überlappt
+          const wasPlaced = dp.placed ? { ...dp.placed } : null;
+          dp.placed = null;
+          this._transform(dp, wasPlaced, 'rot');
+          this._after();
+        }
+      }
+      return;
+    }
     const { x, y } = this._pos(e);
     const p = this._pieceAt(x, y);
     if (!p) return;
     e.preventDefault();
     this.canvas.setPointerCapture(e.pointerId);
+    const wasSelected = this.selectedId === p.id;
     this.selectedId = p.id;
     const wasPlaced = p.placed;
     const b = bounds(this.cells(p));
+    // Griffpunkt merken: Das Teil bleibt an der Stelle unterm Finger, an der
+    // es angefasst wurde (kein "Springen" zur Mitte), nur leicht angehoben.
+    let relX, relY; // Griffpunkt in Zell-Einheiten, auf das Teil begrenzt
+    if (wasPlaced) {
+      relX = (x - (this.bx + wasPlaced.gx * this.cell)) / this.cell;
+      relY = (y - (this.by + wasPlaced.gy * this.cell)) / this.cell;
+    } else {
+      relX = (x - p.tray.x) / p.tray.cell;
+      relY = (y - p.tray.y) / p.tray.cell;
+    }
+    relX = Math.max(0.2, Math.min(b.w - 0.2, relX));
+    relY = Math.max(0.2, Math.min(b.h - 0.2, relY));
     p.drag = {
       pointerId: e.pointerId, x, y, startX: x, startY: y, t0: performance.now(),
-      wasPlaced: wasPlaced ? { ...wasPlaced } : null, moved: false,
-      // Griff: Teil unter dem Finger zentrieren, etwas nach oben versetzt
-      ox: -b.w * this.cell / 2, oy: -b.h * this.cell / 2 - this.cell * 1.1,
+      wasPlaced: wasPlaced ? { ...wasPlaced } : null, wasSelected, moved: false,
+      ox: -relX * this.cell, oy: -relY * this.cell - this.cell * 1.1,
     };
-    p.placed = null;
+    // Das Teil bleibt liegen, bis wirklich gezogen wird – ein Tipp soll es
+    // nicht anheben oder verschieben.
     this.dragPiece = p;
-    this._layoutTray();
   }
 
   _move(e) {
@@ -150,8 +201,11 @@ export class BoardView {
     e.preventDefault();
     const { x, y } = this._pos(e);
     p.drag.x = x; p.drag.y = y;
-    if (!p.drag.moved && Math.hypot(x - p.drag.startX, y - p.drag.startY) > 12) {
+    const threshold = Math.max(16, this.cell * 0.3); // fingerfreundlich
+    if (!p.drag.moved && Math.hypot(x - p.drag.startX, y - p.drag.startY) > threshold) {
       p.drag.moved = true;
+      p.placed = null; // erst jetzt vom Brett abheben
+      this._layoutTray();
       snd.pickup();
     }
   }
@@ -160,36 +214,60 @@ export class BoardView {
     const p = this.dragPiece;
     if (!p || !p.drag || e.pointerId !== p.drag.pointerId) return;
     const d = p.drag;
-    const quick = !d.moved && performance.now() - d.t0 < 400;
+    const quick = !d.moved; // Tipp = keine Bewegung, Druckdauer egal
     p.drag = null;
     this.dragPiece = null;
 
     if (cancel) { p.placed = d.wasPlaced; this._after(); return; }
 
     if (quick) {
-      // Tippen: drehen · Doppeltipp: spiegeln
-      const now = performance.now();
-      const dbl = this._tap.id === p.id && now - this._tap.time < 380;
-      this._tap = { time: now, id: p.id };
-      this._transform(p, d.wasPlaced, dbl ? 'flip' : 'rot');
+      // Erster Tipp wählt das Teil nur aus – erst weitere Tipps drehen es.
+      if (d.wasSelected) {
+        this._transform(p, d.wasPlaced, 'rot');
+      } else {
+        p.placed = d.wasPlaced; // nur auswählen, nichts verändern
+        snd.pickup();
+      }
       this._after();
       return;
     }
 
-    // Ablegen: Rasterposition unter dem Teil bestimmen
+    // Ablegen: passende Rasterposition suchen (mit Einrast-Hilfe in der Nähe)
     const px = d.x + d.ox, py = d.y + d.oy;
-    const gx = Math.round((px - this.bx) / this.cell);
-    const gy = Math.round((py - this.by) / this.cell);
-    if (this._fits(p, gx, gy)) {
-      p.placed = { gx, gy };
+    const snap = this._snapPos(p, px, py);
+    if (snap) {
+      p.placed = snap;
       p.settle = performance.now(); // kleine "Setz"-Animation beim Einrasten
       snd.place();
       this.onPlace();
       if (this.pieces.every(q => q.placed)) { this.locked = true; this.onSolved(); }
-    } else if (d.moved && this.cells(p).some(([cx, cy]) => this.region.has(K(cx + gx, cy + gy)))) {
-      snd.invalid(); // aufs Brett gelegt, passt dort aber nicht
+    } else if (d.moved) {
+      const gx = Math.round((px - this.bx) / this.cell);
+      const gy = Math.round((py - this.by) / this.cell);
+      if (this.cells(p).some(([cx, cy]) => this.region.has(K(cx + gx, cy + gy)))) {
+        snd.invalid(); // aufs Brett gelegt, passt dort aber nicht
+      }
     }
     this._after();
+  }
+
+  // Einrast-Hilfe: exakte Position zuerst, sonst die nächstgelegene passende
+  // Nachbarposition im Umkreis von ~1 Zelle.
+  _snapPos(p, px, py) {
+    const exactX = (px - this.bx) / this.cell, exactY = (py - this.by) / this.cell;
+    const gx = Math.round(exactX), gy = Math.round(exactY);
+    const cand = [];
+    for (let dx = -1; dx <= 1; dx++) {
+      for (let dy = -1; dy <= 1; dy++) {
+        const dist = Math.hypot(gx + dx - exactX, gy + dy - exactY);
+        if (dist <= 1.05) cand.push({ gx: gx + dx, gy: gy + dy, dist });
+      }
+    }
+    cand.sort((a, b) => a.dist - b.dist);
+    for (const c of cand) {
+      if (this._fits(p, c.gx, c.gy)) return { gx: c.gx, gy: c.gy };
+    }
+    return null;
   }
 
   _transform(p, wasPlaced, kind) {
@@ -318,28 +396,43 @@ export class BoardView {
         this._drawPiece(p, ox, oy, c, sel);
       }
     }
-    // Ablage-Teile
+    // Stammplätze in der Ablage dezent andeuten; der aktive leuchtet
     for (const p of this.pieces) {
-      if (p.placed || p.drag) continue;
+      if (!p.slot) continue;
+      const active = p.id === this.selectedId && !p.placed && !(p.drag && p.drag.moved) && !this.locked;
+      ctx.save();
+      ctx.fillStyle = active ? 'rgba(255, 211, 77, .14)' : 'rgba(30, 10, 2, .18)';
+      ctx.strokeStyle = active ? 'rgba(255, 227, 150, .85)' : 'rgba(255, 214, 150, .12)';
+      ctx.lineWidth = active ? 2.5 : 1.5;
+      if (active) { ctx.shadowColor = 'rgba(255, 211, 77, .5)'; ctx.shadowBlur = 10; }
+      this._rr(ctx, p.slot.x - 4, p.slot.y - 4, p.slot.px + 8, p.slot.px + 8, 9);
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
+    }
+    // Ablage-Teile (jedes zentriert in seinem festen Slot); ein nur
+    // gehaltenes (noch nicht gezogenes) Teil bleibt normal liegen
+    for (const p of this.pieces) {
+      if (p.placed || (p.drag && p.drag.moved)) continue;
       this._drawPiece(p, p.tray.x, p.tray.y, p.tray.cell, p.id === this.selectedId);
     }
     // Gezogenes Teil zuletzt (über allem, mit Schatten)
     const dp = this.dragPiece;
-    if (dp && dp.drag) {
+    if (dp && dp.drag && dp.drag.moved) {
       const ctx2 = this.ctx;
       ctx2.save();
       ctx2.shadowColor = 'rgba(0,0,0,.5)';
       ctx2.shadowBlur = 16;
       ctx2.shadowOffsetY = 10;
       const px = dp.drag.x + dp.drag.ox, py = dp.drag.y + dp.drag.oy;
-      // Einrast-Vorschau
-      const gx = Math.round((px - this.bx) / c), gy = Math.round((py - this.by) / c);
-      if (this._fits(dp, gx, gy)) {
+      // Einrast-Vorschau (gleiche Logik wie beim Ablegen, inkl. Einrast-Hilfe)
+      const snap = this._snapPos(dp, px, py);
+      if (snap) {
         ctx2.save();
         ctx2.globalAlpha = .35;
         for (const [cx, cy] of this.cells(dp)) {
           ctx2.fillStyle = '#ffffff';
-          this._rr(ctx2, this.bx + (cx + gx) * c + 3, this.by + (cy + gy) * c + 3, c - 6, c - 6, 6);
+          this._rr(ctx2, this.bx + (cx + snap.gx) * c + 3, this.by + (cy + snap.gy) * c + 3, c - 6, c - 6, 6);
           ctx2.fill();
         }
         ctx2.restore();

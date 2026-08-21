@@ -44,7 +44,7 @@ try {
   const nPieces = await p.evaluate(() => window.__ubongo.game.board.pieces.length);
   assert(nPieces === 3, `Leicht = 3 Teile (${nPieces})`);
 
-  // Tippen dreht ein Teil
+  // Erster Tipp wählt nur aus, zweiter Tipp dreht
   const before = await p.evaluate(() => window.__ubongo.game.board.pieces[0].rot);
   const pos = await p.evaluate(() => {
     const b = window.__ubongo.game.board;
@@ -54,12 +54,21 @@ try {
   });
   await p.mouse.move(pos.x, pos.y);
   await p.mouse.down(); await p.mouse.up();
+  const afterFirst = await p.evaluate(() => ({ rot: window.__ubongo.game.board.pieces[0].rot,
+    sel: window.__ubongo.game.board.selectedId === window.__ubongo.game.board.pieces[0].id }));
+  assert(afterFirst.rot === before && afterFirst.sel, `Erster Tipp wählt nur aus (rot ${before}→${afterFirst.rot})`);
+  await p.mouse.down(); await p.mouse.up();
   const after = await p.evaluate(() => window.__ubongo.game.board.pieces[0].rot);
-  assert(after === (before + 1) % 4, `Tippen dreht Teil (${before}→${after})`);
+  assert(after === (before + 1) % 4, `Zweiter Tipp dreht Teil (${before}→${after})`);
+  // Dritter Tipp an exakt derselben Stelle: dreht weiter, obwohl sich die
+  // Teil-Form gedreht hat (ganzer Slot ist Treffer-Fläche)
+  await p.mouse.down(); await p.mouse.up();
+  const after3 = await p.evaluate(() => window.__ubongo.game.board.pieces[0].rot);
+  assert(after3 === (before + 2) % 4, `Dritter Tipp dreht weiter (${after}→${after3})`);
 
   // Tipp-Funktion kostet 5 Punkte
   await p.click('#ctrl-solution');
-  assert(await p.evaluate(() => window.__ubongo.game.hintPenalty) === 5, 'Tipp kostet 5 Punkte');
+  assert(await p.evaluate(() => window.__ubongo.game.hintUsed) === true, 'Tipp gemerkt (kostet den Zufallsstein)');
 
   // Ein Teil per Drag korrekt platzieren (echte Geste)
   const drag = await p.evaluate(() => {
@@ -77,14 +86,14 @@ try {
     }
     b._layoutTray();
     const t2 = pc.tray, cc = b.cells(pc)[0];
-    const bounds = b.cells(pc).reduce((acc, [x, y]) => ({ w: Math.max(acc.w, x + 1), h: Math.max(acc.h, y + 1) }), { w: 0, h: 0 });
+    // Neuer Griff: Der angefasste Punkt bleibt unterm Finger (plus 1,1 Zellen Anhebung).
+    // Wir fassen die Mitte der ersten Zelle an und peilen deren Zielposition an.
     return {
       id: sol.id,
       from: { x: r.left + t2.x + (cc[0] + 0.5) * t2.cell, y: r.top + t2.y + (cc[1] + 0.5) * t2.cell },
-      // Griff zentriert das Teil unterm Finger, um 1.1 Zellen angehoben – Ziel entsprechend anpeilen
       to: {
-        x: r.left + b.bx + (minX + bounds.w / 2) * b.cell,
-        y: r.top + b.by + (minY + bounds.h / 2) * b.cell + b.cell * 1.1,
+        x: r.left + b.bx + (minX + cc[0] + 0.5) * b.cell,
+        y: r.top + b.by + (minY + cc[1] + 0.5) * b.cell + b.cell * 1.1,
       },
     };
   });
@@ -109,8 +118,12 @@ try {
     g.board.reveal(g.card.solution);
     g._solved();
   });
-  await p.waitForSelector('#overlay-result:not(.hidden)', { timeout: 8000 });
+  await p.waitForSelector('#overlay-result:not(.hidden)', { timeout: 10000 });
   assert(true, 'Runden-Ergebnis erscheint');
+  const gemsInTable = await p.evaluate(() => document.querySelectorAll('#result-table svg.gem').length);
+  assert(gemsInTable > 0, `Edelsteine im Rundenergebnis sichtbar (${gemsInTable})`);
+  const shelfShown = await p.evaluate(() => !document.getElementById('gem-shelf').classList.contains('hidden'));
+  assert(shelfShown, 'Schatzleiste im Spielfeld sichtbar');
   await p.screenshot({ path: SHOT_DIR + '/shot-result.png' });
   await p.click('#result-next');
   await p.waitForSelector('#overlay-final:not(.hidden)');

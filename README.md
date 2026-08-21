@@ -13,7 +13,7 @@ Solo-Modus sogar offline.
 - **Highscores:** lokal auf dem Handy **und** online auf dem Server (Top 50)
 - **Unendlich viele Karten:** prozeduraler Karten-Generator – jede Karte ist garantiert lösbar
 - **4 Schwierigkeitsgrade:** Leicht (3 Teile) · Mittel (4) · Schwer (5) · Experte (6)
-- **Touch-Steuerung:** Ziehen = bewegen · Tippen = drehen · Doppeltipp = spiegeln
+- **Touch-Steuerung:** Ziehen = bewegen · Tippen = auswählen, erneut tippen = drehen · Spiegeln per Knopf
 - **Sound & Musik:** prozedurale Sound-Effekte per WebAudio (Klick, Klack, Countdown,
   Fanfaren, 10-Sekunden-Warnton – ganz ohne Audio-Dateien) und eine leise
   Kalimba-Ambient-Musik. Beides im Spiel einzeln abschaltbar: 🔊/🔇 für Effekte,
@@ -59,8 +59,12 @@ Jede Runde erhält jeder Spieler eine eigene **Karte** (Fläche) und die passend
 **Legeteile**. Wer die Fläche zuerst lückenlos und ohne Überlappung füllt, ruft
 **„UBONGO!“**.
 
-**Punkte:** Gelöst = 10 · Schnellster +5 · Zweiter +3 · Dritter +1 ·
-Zeitbonus +1 pro 10 Sekunden Restzeit.
+**Edelsteine:** Nur wer vor Ablauf der Zeit löst, sammelt wie im Original
+Edelsteine – Schnellster: **blauer Saphir + 1 zufälliger Stein**, Zweiter:
+**brauner Bernstein + 1 zufälliger Stein**, alle weiteren Löser: 1 zufälliger
+Stein (entfällt bei 💡-Tipp). Werte: Braun 1 · Grün 2 · Blau 3 · Rot 4.
+Nach allen Runden gewinnt der wertvollste Schatz. Sobald du gelöst hast,
+läuft die Restzeit der Computer-Gegner im **Schnellvorlauf**.
 
 ## 🛠️ Technik
 

@@ -130,6 +130,11 @@ export function warn() { // nur noch 10 Sekunden!
   tone({ freq: 523.25, type: 'triangle', dur: 0.14, vol: 0.3 });
   tone({ freq: 523.25, type: 'triangle', dur: 0.14, vol: 0.3, delay: 0.22 });
 }
+export function gem() { // Edelstein klimpert beim Einsammeln
+  tone({ freq: 1567.98, type: 'sine', dur: 0.18, vol: 0.2 });
+  tone({ freq: 2093, type: 'sine', dur: 0.26, vol: 0.14, delay: 0.06 });
+  noise({ freq: 5200, q: 3, dur: 0.12, vol: 0.08, delay: 0.02, slide: 1200 });
+}
 export function hint() { // 💡-Tipp
   tone({ freq: 880, type: 'sine', dur: 0.16, vol: 0.24 });
   tone({ freq: 1174.66, type: 'sine', dur: 0.24, vol: 0.2, delay: 0.1 });
