@@ -7,7 +7,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { WebSocketServer } from 'ws';
-import { generateCard, DIFFICULTIES } from './public/js/cardgen.js';
+import { generateCard, DIFFICULTIES, roundSetup } from './public/js/cardgen.js';
 import { roundGems, gemPoints } from './public/js/gems.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -69,6 +69,7 @@ function send(ws, msg) { if (ws && ws.readyState === 1) ws.send(JSON.stringify(m
 function lobbyState(room) {
   return {
     t: 'room', code: room.code, difficulty: room.difficulty, rounds: room.rounds,
+    timeFactor: room.timeFactor || 1,
     players: room.players.map(p => ({ id: p.id, name: p.name, host: p.id === room.hostId, total: p.total, online: p.connected !== false })),
   };
 }
@@ -78,21 +79,22 @@ function broadcast(room, msg) { for (const p of room.players) send(p.ws, msg); }
 function startRound(room) {
   room.round++;
   room.state = 'playing';
-  const time = DIFFICULTIES[room.difficulty].time;
+  const { pieces, time } = roundSetup(room.difficulty, room.round, room.timeFactor || 1);
+  room.pieces = pieces;
   room.timeTotal = time;
   room.roundAt = Date.now();
   for (const p of room.players) {
-    p.ms = null; p.done = false;
+    p.ms = null; p.done = false; p.prog = 0; p.progAt = 0;
     p.seed = Math.floor(Math.random() * 2 ** 31);
-    generateCard(p.seed, room.difficulty); // Validierung serverseitig (deterministisch)
-    send(p.ws, { t: 'round', n: room.round, of: room.rounds, seed: p.seed, time, difficulty: room.difficulty });
+    generateCard(p.seed, room.difficulty, pieces); // Validierung serverseitig (deterministisch)
+    send(p.ws, { t: 'round', n: room.round, of: room.rounds, seed: p.seed, time, pieces, difficulty: room.difficulty });
   }
   clearTimeout(room.timer);
   room.timer = setTimeout(() => finishRound(room), (time + 10) * 1000);
 }
 
 function progress(room) {
-  broadcast(room, { t: 'progress', players: room.players.map(p => ({ id: p.id, name: p.name, done: p.done, ms: p.ms, off: p.connected === false })) });
+  broadcast(room, { t: 'progress', players: room.players.map(p => ({ id: p.id, name: p.name, done: p.done, ms: p.ms, prog: p.prog || 0, off: p.connected === false })) });
 }
 
 function finishRound(room) {
@@ -192,8 +194,9 @@ function rejoin(ws, token) {
     if (room.state === 'playing') {
       const remaining = Math.max(5, Math.round(room.timeTotal - (Date.now() - room.roundAt) / 1000));
       send(ws, { t: 'round', n: room.round, of: room.rounds, seed: p.seed, time: remaining,
+                 full: room.timeTotal, pieces: room.pieces,
                  difficulty: room.difficulty, resumed: true, done: p.done, ms: p.ms });
-      send(ws, { t: 'progress', players: room.players.map(q => ({ id: q.id, name: q.name, done: q.done, ms: q.ms, off: q.connected === false })) });
+      send(ws, { t: 'progress', players: room.players.map(q => ({ id: q.id, name: q.name, done: q.done, ms: q.ms, prog: q.prog || 0, off: q.connected === false })) });
     } else if (room.state === 'final' && room.finalMsg) {
       send(ws, room.finalMsg);
     }
@@ -245,6 +248,7 @@ wss.on('connection', (ws) => {
         if (!me || me.id !== room.hostId) return;
         if (DIFFICULTIES[msg.difficulty]) room.difficulty = msg.difficulty;
         if (msg.rounds) room.rounds = Math.min(9, Math.max(1, msg.rounds | 0));
+        if ([0.7, 1, 1.4].includes(+msg.timeFactor)) room.timeFactor = +msg.timeFactor;
         broadcast(room, lobbyState(room));
         break;
       }
@@ -262,7 +266,7 @@ wss.on('connection', (ws) => {
         const me = room.players.find(p => p.ws === ws);
         if (!me || me.done) return;
         me.done = true;
-        me.ms = Math.min(Math.max(0, msg.ms | 0), DIFFICULTIES[room.difficulty].time * 1000);
+        me.ms = Math.min(Math.max(0, msg.ms | 0), room.timeTotal * 1000);
         progress(room);
         if (room.players.every(p => p.done)) finishRound(room);
         break;
@@ -274,6 +278,17 @@ wss.on('connection', (ws) => {
         me.done = true; me.ms = null;
         progress(room);
         if (room.players.every(p => p.done)) finishRound(room);
+        break;
+      }
+      case 'prog': { // Live-Fortschritt (belegte Felder in Prozent)
+        if (!room || room.state !== 'playing') return;
+        const me = room.players.find(p => p.ws === ws);
+        if (!me || me.done) return;
+        const now = Date.now();
+        if (now - me.progAt < 800) return; // drosseln
+        me.progAt = now;
+        me.prog = Math.min(99, Math.max(0, msg.p | 0));
+        progress(room);
         break;
       }
       case 'rejoin': rejoin(ws, String(msg.token || '')); break;

@@ -66,8 +66,10 @@ function chipGroup(id, onChange) {
 const soloDiff = chipGroup('solo-diff');
 const soloBots = chipGroup('solo-bots');
 const soloSkill = chipGroup('solo-skill');
+const soloTempo = chipGroup('solo-tempo');
 const soloRounds = chipGroup('solo-rounds');
 const lobbyDiff = chipGroup('lobby-diff', () => sendConfig());
+const lobbyTempo = chipGroup('lobby-tempo', () => sendConfig());
 const lobbyRounds = chipGroup('lobby-rounds', () => sendConfig());
 
 // Namen vorbelegen und merken
@@ -130,6 +132,7 @@ $('solo-start').addEventListener('click', () => {
     mode: 'solo', name,
     difficulty: soloDiff.get(),
     rounds: parseInt(soloRounds.get(), 10),
+    timeFactor: parseFloat(soloTempo.get()),
     botCount: parseInt(soloBots.get(), 10),
     botSkill: soloSkill.get(),
   });
@@ -139,7 +142,8 @@ $('solo-start').addEventListener('click', () => {
 
 // ---------- Online ----------
 function sendConfig() {
-  if (net && isHost) net.send({ t: 'config', difficulty: lobbyDiff.get(), rounds: parseInt(lobbyRounds.get(), 10) });
+  if (net && isHost) net.send({ t: 'config', difficulty: lobbyDiff.get(),
+    rounds: parseInt(lobbyRounds.get(), 10), timeFactor: parseFloat(lobbyTempo.get()) });
 }
 
 async function connect() {
@@ -216,6 +220,7 @@ function renderLobby(msg) {
   // Host-Auswahl synchron halten
   document.querySelectorAll('#lobby-diff .chip').forEach(c => c.classList.toggle('active', c.dataset.val === msg.difficulty));
   document.querySelectorAll('#lobby-rounds .chip').forEach(c => c.classList.toggle('active', c.dataset.val === String(msg.rounds)));
+  document.querySelectorAll('#lobby-tempo .chip').forEach(c => c.classList.toggle('active', parseFloat(c.dataset.val) === (msg.timeFactor || 1)));
 }
 
 // Unerwarteter Verbindungsabbruch: mit dem Sitzungs-Token zurück in den Raum.

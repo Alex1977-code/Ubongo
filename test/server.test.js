@@ -66,8 +66,16 @@ try {
   const room2 = await waitFor('c', 'room');
   d.send(JSON.stringify({ t: 'join', code: room2.code, name: 'Dora' }));
   await waitFor('d', 'room');
+  inbox.c = inbox.c.filter(m => m.t !== 'room');
+  c.send(JSON.stringify({ t: 'config', timeFactor: 0.7 }));
+  const cfg = await waitFor('c', 'room');
+  assert(cfg.timeFactor === 0.7, 'Tempo-Einstellung in der Lobby');
   c.send(JSON.stringify({ t: 'start' }));
   const [rc, rd] = await Promise.all([waitFor('c', 'round'), waitFor('d', 'round')]);
+  assert(rc.time === 63 && rc.pieces === 3, `Tempo Flott: 63 s / 3 Teile (war ${rc.time} s / ${rc.pieces})`);
+  d.send(JSON.stringify({ t: 'prog', p: 40 }));
+  const prg = await waitFor('c', 'progress');
+  assert(prg.players.find(p => p.name === 'Dora').prog === 40, 'Live-Fortschritt kommt bei Mitspielern an');
   inbox.c = inbox.c.filter(m => m.t !== 'room'); // alte Lobby-Nachrichten verwerfen
   d.terminate(); // Verbindungsabbruch ohne sauberes Verlassen (Handy-Bildschirm aus)
   const lob = await waitFor('c', 'room');

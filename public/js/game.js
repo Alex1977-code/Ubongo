@@ -1,7 +1,7 @@
 // Spielablauf: Runden, Timer, Punkte, Gegner-Anzeige, Overlays – für
 // Solo (gegen Computer) und Online (über den Server).
 
-import { generateCard, DIFFICULTIES } from './cardgen.js';
+import { generateCard, DIFFICULTIES, roundSetup } from './cardgen.js';
 import { BoardView } from './board.js';
 import { makeBots, newRound, botProgress, botTick } from './ai.js';
 import { addLocalScore } from './highscore.js';
@@ -36,22 +36,30 @@ export class Game {
   }
 
   // ---------- Rundenstart ----------
-  startSolo() { this._beginRound(Math.floor(Math.random() * 2 ** 31)); }
+  startSolo() {
+    const setup = roundSetup(this.o.difficulty, this.round + 1, this.o.timeFactor || 1);
+    this.roundPieces = setup.pieces;
+    this.roundTime = setup.time;
+    this._beginRound(Math.floor(Math.random() * 2 ** 31));
+  }
 
   onRound(msg) {  // Online: Server verteilt Karten-Seed
     this.round = msg.n - 1;
     this.o.rounds = msg.of;
     this.diff = DIFFICULTIES[msg.difficulty];
+    this.roundPieces = msg.pieces;
+    this.roundTime = msg.full || msg.time; // volle Rundenzeit (bei Rückkehr: full)
     this._beginRound(msg.seed, msg.resumed ? msg : null);
   }
 
   _beginRound(seed, resume) {
     if (this.destroyed) return;
     this.round++;
+    this.roundTime = this.roundTime || this.diff.time;
     this.hintUsed = false;
     this._warned = false;
     this.myMs = null; this.myDone = false;
-    this.card = generateCard(seed, this.o.difficulty);
+    this.card = generateCard(seed, this.o.difficulty, this.roundPieces);
     $('game-round').textContent = `Runde ${this.round}/${this.o.rounds}`;
     document.querySelectorAll('.fly-gem').forEach(el => el.remove());
     $('overlay-result').classList.add('hidden');
@@ -59,13 +67,15 @@ export class Game {
     $('overlay-solved').classList.add('hidden');
 
     if (this.board) this.board.destroy();
+    this._progAt = 0;
     this.board = new BoardView($('board'), this.card, {
       onSolved: () => this._solved(),
+      onPlace: () => this._shareProgress(),
     });
     this.board.locked = true; // bis Countdown vorbei
 
     if (this.mode === 'solo') {
-      for (const b of this.bots) Object.assign(b, newRound(b.skill, this.diff.time));
+      for (const b of this.bots) Object.assign(b, newRound(b.skill, this.roundTime));
     }
     this._renderOpponents();
 
@@ -102,7 +112,7 @@ export class Game {
 
   _startTimer(remainingSecs) {
     this.t0 = performance.now();
-    this.endAt = this.t0 + (remainingSecs ?? this.diff.time) * 1000;
+    this.endAt = this.t0 + (remainingSecs ?? this.roundTime) * 1000;
     this.vElapsed = 0;               // virtuelle Rundenzeit (für Schnellvorlauf)
     this._lastTick = this.t0;
     clearInterval(this.timerIv);
@@ -122,7 +132,7 @@ export class Game {
       ffwd = this.myDone;
       this.vElapsed += (now - this._lastTick) * (ffwd ? FFWD : 1);
       this._lastTick = now;
-      left = this.diff.time * 1000 - this.vElapsed;
+      left = this.roundTime * 1000 - this.vElapsed;
     } else {
       left = this.endAt - now;
     }
@@ -130,7 +140,7 @@ export class Game {
     const el = $('game-timer');
     el.textContent = (ffwd ? '⏩ ' : '') + fmt(left);
     el.classList.toggle('low', left < 15000 && !this.myDone);
-    $('timer-fill').style.width = Math.max(0, (left / (this.diff.time * 1000)) * 100) + '%';
+    $('timer-fill').style.width = Math.max(0, (left / (this.roundTime * 1000)) * 100) + '%';
 
     if (!this.myDone && !this._warned && left <= 10000 && left > 0) {
       this._warned = true;
@@ -150,6 +160,16 @@ export class Game {
       clearInterval(this.timerIv);
       $('game-timer').textContent = '0:00';
     }
+  }
+
+  // Eigenen Fortschritt (belegte Felder) an die Mitspieler melden
+  _shareProgress() {
+    if (this.mode !== 'online' || this.myDone || !this.board) return;
+    const now = performance.now();
+    if (now - this._progAt < 1200) return;
+    this._progAt = now;
+    const covered = this.board.pieces.reduce((s, p) => s + (p.placed ? this.board.cells(p).length : 0), 0);
+    this.o.net.send({ t: 'prog', p: Math.round((covered / this.card.cells.length) * 100) });
   }
 
   _solved() {
@@ -322,8 +342,8 @@ export class Game {
     const host = $('opponents');
     if (this.mode === 'solo') {
       host.innerHTML = this.bots.map(b => {
-        const prog = b.done ? 1 : botProgress(b, elapsed ?? 0, this.diff.time);
-        const cls = b.done ? 'done' : (b.solveMs === null && (elapsed ?? 0) > this.diff.time * 900) ? 'dnf' : '';
+        const prog = b.done ? 1 : botProgress(b, elapsed ?? 0, this.roundTime);
+        const cls = b.done ? 'done' : (b.solveMs === null && (elapsed ?? 0) > this.roundTime * 900) ? 'dnf' : '';
         return `<div class="opp ${cls}"><div class="opp-name">${b.emoji} ${esc(b.name)}` +
           `<span style="margin-left:auto">${b.done ? '✓ ' + fmt2(b.ms) : ''}</span></div>` +
           `<div class="opp-bar"><div class="opp-fill" style="width:${Math.round(prog * 100)}%"></div></div></div>`;
@@ -334,7 +354,7 @@ export class Game {
         `<div class="opp ${p.done ? (p.ms != null ? 'done' : 'dnf') : ''} ${p.off ? 'dnf' : ''}">` +
         `<div class="opp-name">${esc(p.name)}<span style="margin-left:auto">` +
         `${p.off ? '📴' : p.done ? (p.ms != null ? '✓ ' + fmt2(p.ms) : '✗') : '…'}</span></div>` +
-        `<div class="opp-bar"><div class="opp-fill" style="width:${p.done ? 100 : 8}%"></div></div></div>`).join('');
+        `<div class="opp-bar"><div class="opp-fill" style="width:${p.done ? 100 : Math.max(4, p.prog || 0)}%"></div></div></div>`).join('');
     }
   }
 

@@ -106,15 +106,30 @@ function tryBuild(pieceIds, rand, maxW, maxH) {
   };
 }
 
+// Rundenaufbau innerhalb einer Partie: Karten werden allmählich kniffliger
+// (ab Runde 3 ein Teil mehr, ab Runde 5 zwei), die Zeit wächst mit und wird
+// mit dem Tempo-Faktor (Flott/Normal/Entspannt) skaliert.
+const TIME_BY_COUNT = { 3: 90, 4: 120, 5: 150, 6: 180 };
+
+export function roundSetup(difficulty, round, timeFactor = 1) {
+  const base = DIFFICULTIES[difficulty] || DIFFICULTIES.mittel;
+  const extra = Math.min(2, Math.floor(((round || 1) - 1) / 2));
+  const pieces = Math.min(6, base.pieces + extra);
+  return { pieces, time: Math.round(TIME_BY_COUNT[pieces] * timeFactor) };
+}
+
 // Öffentliche API: Karte für Seed + Schwierigkeit erzeugen.
-export function generateCard(seed, difficulty) {
+// pieceCount überschreibt optional die Teilanzahl (für die Runden-Steigerung).
+export function generateCard(seed, difficulty, pieceCount) {
   const diff = DIFFICULTIES[difficulty] || DIFFICULTIES.mittel;
+  const count = pieceCount || diff.pieces;
+  const limits = Object.values(DIFFICULTIES).find(d => d.pieces === count) || diff;
   const rand = rng(seed);
   for (let attempt = 0; attempt < 60; attempt++) {
-    const ids = shuffled(PIECES.map(p => p.id), rand).slice(0, diff.pieces);
-    const card = tryBuild(ids, rand, diff.maxW, diff.maxH);
+    const ids = shuffled(PIECES.map(p => p.id), rand).slice(0, count);
+    const card = tryBuild(ids, rand, limits.maxW, limits.maxH);
     if (card) return card;
   }
   // Fallback (praktisch unerreichbar): einfache Reihe aus I3+V3.
-  return tryBuild(['I3', 'V3', 'O4'].slice(0, Math.min(3, diff.pieces)), rng(seed + 1), 12, 12);
+  return tryBuild(['I3', 'V3', 'O4'].slice(0, Math.min(3, count)), rng(seed + 1), 12, 12);
 }
