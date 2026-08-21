@@ -54,6 +54,40 @@ try {
   assert(fin.ranking.length === 2, 'Endstand mit 2 Spielern');
   assert(fin.ranking.every(r => r.gems.length === 2), 'Endstand enthält Edelsteine');
   assert(fin.highscores.some(h => h.name === 'Anna' && h.score === anna.points), 'Highscore gespeichert');
+
+  // ---- Wiederverbinden: Abbruch mitten in der Runde, Rückkehr per Token ----
+  const c = new WebSocket(url), d = new WebSocket(url);
+  await Promise.all([open(c), open(d)]);
+  inbox.c = []; inbox.d = [];
+  let tokenD = null;
+  c.on('message', m => inbox.c.push(JSON.parse(m)));
+  d.on('message', m => { const j = JSON.parse(m); if (j.t === 'you' && j.token) tokenD = j.token; inbox.d.push(j); });
+  c.send(JSON.stringify({ t: 'create', name: 'Carl', difficulty: 'leicht', rounds: 1 }));
+  const room2 = await waitFor('c', 'room');
+  d.send(JSON.stringify({ t: 'join', code: room2.code, name: 'Dora' }));
+  await waitFor('d', 'room');
+  c.send(JSON.stringify({ t: 'start' }));
+  const [rc, rd] = await Promise.all([waitFor('c', 'round'), waitFor('d', 'round')]);
+  inbox.c = inbox.c.filter(m => m.t !== 'room'); // alte Lobby-Nachrichten verwerfen
+  d.terminate(); // Verbindungsabbruch ohne sauberes Verlassen (Handy-Bildschirm aus)
+  const lob = await waitFor('c', 'room');
+  assert(lob.players.length === 2 && lob.players.some(p => p.name === 'Dora' && p.online === false),
+    'Dora bleibt als offline im Raum');
+  const d2 = new WebSocket(url);
+  await open(d2);
+  inbox.d2 = [];
+  d2.on('message', m => inbox.d2.push(JSON.parse(m)));
+  d2.send(JSON.stringify({ t: 'rejoin', token: tokenD }));
+  const resumed = await waitFor('d2', 'round');
+  assert(resumed.resumed === true && resumed.seed === rd.seed && resumed.done === false,
+    'Dora kehrt in die laufende Runde zurück (gleiche Karte, Restzeit)');
+  assert(resumed.time > 0 && resumed.time <= rd.time, `Restzeit plausibel (${resumed.time}s von ${rd.time}s)`);
+  c.send(JSON.stringify({ t: 'solved', ms: 20000 }));
+  d2.send(JSON.stringify({ t: 'solved', ms: 30000 }));
+  const res2 = await waitFor('d2', 'roundResult');
+  assert(res2.results.find(r => r.name === 'Dora').gems[0] === 'bernstein', 'Dora wertet nach Rückkehr normal');
+  c.close(); d2.close();
+
   console.log(fails === 0 ? 'server: alle Tests OK' : `server: ${fails} Fehler`);
 } catch (e) {
   console.error('FAIL:', e.message); fails++;

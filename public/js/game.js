@@ -42,10 +42,10 @@ export class Game {
     this.round = msg.n - 1;
     this.o.rounds = msg.of;
     this.diff = DIFFICULTIES[msg.difficulty];
-    this._beginRound(msg.seed);
+    this._beginRound(msg.seed, msg.resumed ? msg : null);
   }
 
-  _beginRound(seed) {
+  _beginRound(seed, resume) {
     if (this.destroyed) return;
     this.round++;
     this.hintUsed = false;
@@ -69,6 +69,19 @@ export class Game {
     }
     this._renderOpponents();
 
+    if (resume) {
+      // Wiederverbunden mitten in der Runde: kein Countdown, Restzeit weiter
+      this._startTimer(resume.time);
+      if (resume.done) {
+        this.myDone = true;
+        this.myMs = resume.ms ?? null;
+        this.board.locked = true;
+      } else {
+        this.board.locked = false;
+      }
+      return;
+    }
+
     // Countdown 3-2-1
     const ov = $('overlay-countdown'), num = $('countdown-num');
     ov.classList.remove('hidden');
@@ -87,9 +100,9 @@ export class Game {
     }, 900);
   }
 
-  _startTimer() {
+  _startTimer(remainingSecs) {
     this.t0 = performance.now();
-    this.endAt = this.t0 + this.diff.time * 1000;
+    this.endAt = this.t0 + (remainingSecs ?? this.diff.time) * 1000;
     this.vElapsed = 0;               // virtuelle Rundenzeit (für Schnellvorlauf)
     this._lastTick = this.t0;
     clearInterval(this.timerIv);
@@ -259,8 +272,12 @@ export class Game {
   }
 
   // ---------- Online-Ereignisse ----------
+  setRoster(players) { // Namen aus der Lobby (Progress-Nachrichten tragen nur IDs)
+    this.roster = Object.fromEntries(players.map(p => [p.id, p.name]));
+  }
+
   onProgress(msg) {
-    this.oppState = msg.players;
+    this.oppState = msg.players.map(p => ({ ...p, name: (this.roster || {})[p.id] || p.name || 'Spieler' }));
     this._renderOpponents();
   }
 
@@ -314,9 +331,9 @@ export class Game {
     } else {
       const players = (this.oppState || []).filter(p => p.id !== this.o.net.myId);
       host.innerHTML = players.map(p =>
-        `<div class="opp ${p.done ? (p.ms != null ? 'done' : 'dnf') : ''}">` +
+        `<div class="opp ${p.done ? (p.ms != null ? 'done' : 'dnf') : ''} ${p.off ? 'dnf' : ''}">` +
         `<div class="opp-name">${esc(p.name)}<span style="margin-left:auto">` +
-        `${p.done ? (p.ms != null ? '✓ ' + fmt2(p.ms) : '✗') : '…'}</span></div>` +
+        `${p.off ? '📴' : p.done ? (p.ms != null ? '✓ ' + fmt2(p.ms) : '✗') : '…'}</span></div>` +
         `<div class="opp-bar"><div class="opp-fill" style="width:${p.done ? 100 : 8}%"></div></div></div>`).join('');
     }
   }

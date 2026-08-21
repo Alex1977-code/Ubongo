@@ -80,10 +80,15 @@ for (const id of ['solo-name', 'online-name']) {
 let game = null;
 let net = null;
 let isHost = false;
+let sessionToken = null;   // für automatisches Wiederverbinden
+let reconnecting = false;
 
 function endGame(backTo = 'start') {
   if (game) { game.destroy(); game = null; }
   if (net) { net.close(); net = null; }
+  sessionToken = null;
+  reconnecting = false;
+  $('net-banner').classList.add('hidden');
   show(backTo);
 }
 
@@ -135,26 +140,26 @@ function sendConfig() {
 async function connect() {
   if (net && net.connected) return net;
   net = new Net();
-  net.on('room', (msg) => renderLobby(msg))
-     .on('error', (msg) => { $('online-status').textContent = msg.msg; })
+  net.on('you', (msg) => { if (msg.token) sessionToken = msg.token; })
+     .on('room', (msg) => renderLobby(msg))
+     .on('error', (msg) => {
+       $('online-status').textContent = msg.msg;
+       if (msg.fatal) endGame('online');
+     })
      .on('round', (msg) => {
        if (!game) {
          game = new Game({ mode: 'online', name: getName() || 'Spieler',
                            difficulty: msg.difficulty, rounds: msg.of, net });
          show('game');
        }
+       game.o.net = net;
        game.o.difficulty = msg.difficulty;
        game.onRound(msg);
      })
      .on('progress', (msg) => game && game.onProgress(msg))
      .on('roundResult', (msg) => game && game.onRoundResult(msg))
      .on('final', (msg) => game && game.onFinal(msg))
-     .on('_close', () => {
-       if (document.querySelector('#screen-lobby.active') || document.querySelector('#screen-game.active')) {
-         endGame('online');
-         $('online-status').textContent = 'Verbindung getrennt.';
-       }
-     });
+     .on('_close', () => handleDisconnect());
   await net.connect();
   return net;
 }
@@ -188,12 +193,14 @@ $('online-join').addEventListener('click', async () => {
 });
 
 function renderLobby(msg) {
+  if (game && game.mode === 'online') { game.setRoster(msg.players); return; } // mitten im Spiel: nur Namen aktualisieren
   show('lobby');
   $('lobby-code').textContent = msg.code;
   const me = msg.players.find(p => p.id === net.myId);
   isHost = !!(me && me.host);
   $('lobby-players').innerHTML = msg.players.map(p =>
-    `<li>${p.host ? '👑' : '🙂'} ${esc(p.name)}${p.id === net.myId ? ' (du)' : ''}` +
+    `<li class="${p.online === false ? 'offline' : ''}">${p.host ? '👑' : '🙂'} ${esc(p.name)}` +
+    `${p.id === net.myId ? ' (du)' : ''}${p.online === false ? ' 📴' : ''}` +
     `${p.host ? '<span class="badge">Gastgeber</span>' : ''}</li>`).join('');
   $('lobby-host-controls').classList.toggle('hidden', !isHost);
   $('lobby-wait').classList.toggle('hidden', isHost);
@@ -201,6 +208,48 @@ function renderLobby(msg) {
   document.querySelectorAll('#lobby-diff .chip').forEach(c => c.classList.toggle('active', c.dataset.val === msg.difficulty));
   document.querySelectorAll('#lobby-rounds .chip').forEach(c => c.classList.toggle('active', c.dataset.val === String(msg.rounds)));
 }
+
+// Unerwarteter Verbindungsabbruch: mit dem Sitzungs-Token zurück in den Raum.
+// Absichtliches Verlassen läuft über net.close(), das kein _close auslöst.
+function handleDisconnect() {
+  const active = document.querySelector('#screen-lobby.active') ||
+    (document.querySelector('#screen-game.active') && game && game.mode === 'online');
+  if (!active) return;
+  if (!sessionToken) {
+    endGame('online');
+    $('online-status').textContent = 'Verbindung getrennt.';
+    return;
+  }
+  attemptReconnect();
+}
+
+async function attemptReconnect() {
+  if (reconnecting) return;
+  reconnecting = true;
+  $('net-banner').classList.remove('hidden');
+  for (let i = 0; i < 24 && reconnecting; i++) {
+    try {
+      net = null;                              // alte Verbindung verwerfen
+      await connect();                         // neu verbinden (Handler inklusive)
+      net.send({ t: 'rejoin', token: sessionToken });
+      if (game) game.o.net = net;
+      reconnecting = false;
+      $('net-banner').classList.add('hidden');
+      return;
+    } catch {
+      await new Promise(r => setTimeout(r, 2500));
+    }
+  }
+  reconnecting = false;
+  $('net-banner').classList.add('hidden');
+  endGame('online');
+  $('online-status').textContent = 'Verbindung verloren – bitte neu beitreten.';
+}
+
+// Handy-Bildschirm wieder an: sofort neu verbinden statt zu warten
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && sessionToken && (!net || !net.connected)) handleDisconnect();
+});
 
 $('lobby-start').addEventListener('click', () => net && net.send({ t: 'start' }));
 $('lobby-leave').addEventListener('click', () => {

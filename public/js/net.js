@@ -1,7 +1,7 @@
 // WebSocket-Client für den Mehrspieler-Modus.
 
 export class Net {
-  constructor() { this.ws = null; this.handlers = {}; this.myId = null; }
+  constructor() { this.ws = null; this.handlers = {}; this.myId = null; this.token = null; }
 
   on(type, fn) { this.handlers[type] = fn; return this; }
 
@@ -14,7 +14,7 @@ export class Net {
       ws.onerror = () => { clearTimeout(timeout); reject(new Error('Verbindung fehlgeschlagen')); };
       ws.onmessage = (e) => {
         let msg; try { msg = JSON.parse(e.data); } catch { return; }
-        if (msg.t === 'you') this.myId = msg.id;
+        if (msg.t === 'you') { this.myId = msg.id; if (msg.token) this.token = msg.token; }
         (this.handlers[msg.t] || (() => {}))(msg);
       };
       ws.onclose = () => { this.ws = null; (this.handlers._close || (() => {}))(); };

@@ -2,6 +2,7 @@
 // Start:  npm start   (Port über PORT-Umgebungsvariable, Standard 3000)
 
 import http from 'node:http';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -62,12 +63,12 @@ function newCode() {
 
 let nextPlayerId = 1;
 
-function send(ws, msg) { if (ws.readyState === 1) ws.send(JSON.stringify(msg)); }
+function send(ws, msg) { if (ws && ws.readyState === 1) ws.send(JSON.stringify(msg)); }
 
 function lobbyState(room) {
   return {
     t: 'room', code: room.code, difficulty: room.difficulty, rounds: room.rounds,
-    players: room.players.map(p => ({ id: p.id, name: p.name, host: p.id === room.hostId, total: p.total })),
+    players: room.players.map(p => ({ id: p.id, name: p.name, host: p.id === room.hostId, total: p.total, online: p.connected !== false })),
   };
 }
 
@@ -77,7 +78,8 @@ function startRound(room) {
   room.round++;
   room.state = 'playing';
   const time = DIFFICULTIES[room.difficulty].time;
-  room.deadline = Date.now() + (time + 8) * 1000; // + Puffer für Countdown/Latenz
+  room.timeTotal = time;
+  room.roundAt = Date.now();
   for (const p of room.players) {
     p.ms = null; p.done = false;
     p.seed = Math.floor(Math.random() * 2 ** 31);
@@ -89,7 +91,7 @@ function startRound(room) {
 }
 
 function progress(room) {
-  broadcast(room, { t: 'progress', players: room.players.map(p => ({ id: p.id, done: p.done, ms: p.ms })) });
+  broadcast(room, { t: 'progress', players: room.players.map(p => ({ id: p.id, name: p.name, done: p.done, ms: p.ms, off: p.connected === false })) });
 }
 
 function finishRound(room) {
@@ -114,18 +116,17 @@ function finishRound(room) {
     for (const p of room.players) {
       addHighscore({ name: p.name, score: p.total, difficulty: room.difficulty, date: new Date().toISOString().slice(0, 10), online: true });
     }
-    broadcast(room, { t: 'final', ranking, highscores });
+    room.finalMsg = { t: 'final', ranking, highscores };
+    broadcast(room, room.finalMsg);
   } else {
     setTimeout(() => { if (rooms.has(room.code) && room.state === 'between') startRound(room); }, 6000);
   }
 }
 
-function leaveRoom(ws) {
-  const room = ws.room;
-  if (!room) return;
-  const idx = room.players.findIndex(p => p.ws === ws);
+function removePlayer(room, player) {
+  const idx = room.players.indexOf(player);
   if (idx >= 0) room.players.splice(idx, 1);
-  ws.room = null;
+  if (player.ws) player.ws.room = null;
   if (room.players.length === 0) {
     clearTimeout(room.timer);
     rooms.delete(room.code);
@@ -134,6 +135,71 @@ function leaveRoom(ws) {
   if (!room.players.some(p => p.id === room.hostId)) room.hostId = room.players[0].id;
   broadcast(room, lobbyState(room));
   if (room.state === 'playing' && room.players.every(p => p.done)) finishRound(room);
+}
+
+function leaveRoom(ws) {
+  const room = ws.room;
+  if (!room) return;
+  const p = room.players.find(q => q.ws === ws);
+  ws.room = null;
+  if (p) removePlayer(room, p);
+}
+
+// Verbindungsverlust: Spieler bleibt im Raum und kann mit seinem Token
+// zurückkehren (Handy-Bildschirm aus, WLAN-Wackler, App-Wechsel …).
+const RECONNECT_GRACE_MS = 120000;
+
+function markDisconnected(ws) {
+  const room = ws.room;
+  if (!room) return;
+  const p = room.players.find(q => q.ws === ws);
+  ws.room = null;
+  if (!p) return;
+  p.connected = false;
+  p.disconnectedAt = Date.now();
+  p.ws = null;
+  if (room.players.every(q => q.connected === false)) return; // Sweeper räumt auf
+  broadcast(room, lobbyState(room));
+  if (room.state === 'playing') progress(room);
+}
+
+// Regelmäßig endgültig entfernen, wer zu lange weg ist
+setInterval(() => {
+  const now = Date.now();
+  for (const room of [...rooms.values()]) {
+    for (const p of [...room.players]) {
+      if (p.connected === false && now - p.disconnectedAt > RECONNECT_GRACE_MS) removePlayer(room, p);
+    }
+    if (room.players.length > 0 && room.players.every(p => p.connected === false) &&
+        room.players.every(p => now - p.disconnectedAt > RECONNECT_GRACE_MS)) {
+      clearTimeout(room.timer);
+      rooms.delete(room.code);
+    }
+  }
+}, 20000).unref();
+
+function rejoin(ws, token) {
+  for (const room of rooms.values()) {
+    const p = room.players.find(q => q.token === token);
+    if (!p) continue;
+    if (p.ws && p.ws !== ws) { try { p.ws.room = null; p.ws.close(); } catch { /* egal */ } }
+    p.ws = ws;
+    p.connected = true;
+    p.disconnectedAt = null;
+    ws.room = room;
+    send(ws, { t: 'you', id: p.id, token: p.token });
+    if (room.state === 'playing') {
+      const remaining = Math.max(5, Math.round(room.timeTotal - (Date.now() - room.roundAt) / 1000));
+      send(ws, { t: 'round', n: room.round, of: room.rounds, seed: p.seed, time: remaining,
+                 difficulty: room.difficulty, resumed: true, done: p.done, ms: p.ms });
+      send(ws, { t: 'progress', players: room.players.map(q => ({ id: q.id, name: q.name, done: q.done, ms: q.ms, off: q.connected === false })) });
+    } else if (room.state === 'final' && room.finalMsg) {
+      send(ws, room.finalMsg);
+    }
+    broadcast(room, lobbyState(room));
+    return;
+  }
+  send(ws, { t: 'error', msg: 'Sitzung abgelaufen – bitte neu beitreten.', fatal: true });
 }
 
 const wss = new WebSocketServer({ server, path: '/ws' });
@@ -150,11 +216,12 @@ wss.on('connection', (ws) => {
         const code = newCode();
         const diff = DIFFICULTIES[msg.difficulty] ? msg.difficulty : 'mittel';
         const rounds = Math.min(9, Math.max(1, msg.rounds | 0)) || 3;
-        const player = { id: nextPlayerId++, ws, name: clean(msg.name) || 'Spieler', total: 0, gems: [], done: false, ms: null };
+        const player = { id: nextPlayerId++, ws, name: clean(msg.name) || 'Spieler', total: 0, gems: [],
+                         done: false, ms: null, token: crypto.randomBytes(12).toString('hex'), connected: true };
         const r = { code, players: [player], hostId: player.id, difficulty: diff, rounds, round: 0, state: 'lobby', timer: null };
         rooms.set(code, r);
         ws.room = r;
-        send(ws, { t: 'you', id: player.id });
+        send(ws, { t: 'you', id: player.id, token: player.token });
         broadcast(r, lobbyState(r));
         break;
       }
@@ -163,10 +230,11 @@ wss.on('connection', (ws) => {
         if (!r) { send(ws, { t: 'error', msg: 'Raum nicht gefunden.' }); return; }
         if (r.state !== 'lobby') { send(ws, { t: 'error', msg: 'Das Spiel läuft bereits.' }); return; }
         if (r.players.length >= 8) { send(ws, { t: 'error', msg: 'Der Raum ist voll (max. 8).' }); return; }
-        const player = { id: nextPlayerId++, ws, name: clean(msg.name) || 'Spieler', total: 0, gems: [], done: false, ms: null };
+        const player = { id: nextPlayerId++, ws, name: clean(msg.name) || 'Spieler', total: 0, gems: [],
+                         done: false, ms: null, token: crypto.randomBytes(12).toString('hex'), connected: true };
         r.players.push(player);
         ws.room = r;
-        send(ws, { t: 'you', id: player.id });
+        send(ws, { t: 'you', id: player.id, token: player.token });
         broadcast(r, lobbyState(r));
         break;
       }
@@ -207,10 +275,11 @@ wss.on('connection', (ws) => {
         if (room.players.every(p => p.done)) finishRound(room);
         break;
       }
+      case 'rejoin': rejoin(ws, String(msg.token || '')); break;
       case 'leave': leaveRoom(ws); break;
     }
   });
-  ws.on('close', () => leaveRoom(ws));
+  ws.on('close', () => markDisconnected(ws));
 });
 
 server.listen(PORT, () => {
