@@ -1,0 +1,9 @@
+# 1-Klick-Deploy des Ubongo-Servers auf render.com (kostenloser Plan).
+# Anleitung: siehe README, Abschnitt "Über das Internet spielen".
+services:
+  - type: web
+    name: ubongo-server
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start

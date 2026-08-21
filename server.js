@@ -2,11 +2,12 @@
 // Start:  npm start   (Port über PORT-Umgebungsvariable, Standard 3000)
 
 import http from 'node:http';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { WebSocketServer } from 'ws';
-import { generateCard, DIFFICULTIES } from './public/js/cardgen.js';
+import { generateCard, DIFFICULTIES, roundSetup } from './public/js/cardgen.js';
 import { roundGems, gemPoints } from './public/js/gems.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -36,7 +37,8 @@ const MIME = {
 const server = http.createServer((req, res) => {
   const url = new URL(req.url, 'http://x');
   if (url.pathname === '/api/highscores') {
-    res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+    res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store',
+                         'Access-Control-Allow-Origin': '*' });
     res.end(JSON.stringify(highscores));
     return;
   }
@@ -62,12 +64,13 @@ function newCode() {
 
 let nextPlayerId = 1;
 
-function send(ws, msg) { if (ws.readyState === 1) ws.send(JSON.stringify(msg)); }
+function send(ws, msg) { if (ws && ws.readyState === 1) ws.send(JSON.stringify(msg)); }
 
 function lobbyState(room) {
   return {
     t: 'room', code: room.code, difficulty: room.difficulty, rounds: room.rounds,
-    players: room.players.map(p => ({ id: p.id, name: p.name, host: p.id === room.hostId, total: p.total })),
+    timeFactor: room.timeFactor || 1,
+    players: room.players.map(p => ({ id: p.id, name: p.name, host: p.id === room.hostId, total: p.total, online: p.connected !== false })),
   };
 }
 
@@ -76,20 +79,22 @@ function broadcast(room, msg) { for (const p of room.players) send(p.ws, msg); }
 function startRound(room) {
   room.round++;
   room.state = 'playing';
-  const time = DIFFICULTIES[room.difficulty].time;
-  room.deadline = Date.now() + (time + 8) * 1000; // + Puffer für Countdown/Latenz
+  const { pieces, time } = roundSetup(room.difficulty, room.round, room.timeFactor || 1);
+  room.pieces = pieces;
+  room.timeTotal = time;
+  room.roundAt = Date.now();
   for (const p of room.players) {
-    p.ms = null; p.done = false;
+    p.ms = null; p.done = false; p.prog = 0; p.progAt = 0;
     p.seed = Math.floor(Math.random() * 2 ** 31);
-    generateCard(p.seed, room.difficulty); // Validierung serverseitig (deterministisch)
-    send(p.ws, { t: 'round', n: room.round, of: room.rounds, seed: p.seed, time, difficulty: room.difficulty });
+    generateCard(p.seed, room.difficulty, pieces); // Validierung serverseitig (deterministisch)
+    send(p.ws, { t: 'round', n: room.round, of: room.rounds, seed: p.seed, time, pieces, difficulty: room.difficulty });
   }
   clearTimeout(room.timer);
   room.timer = setTimeout(() => finishRound(room), (time + 10) * 1000);
 }
 
 function progress(room) {
-  broadcast(room, { t: 'progress', players: room.players.map(p => ({ id: p.id, done: p.done, ms: p.ms })) });
+  broadcast(room, { t: 'progress', players: room.players.map(p => ({ id: p.id, name: p.name, done: p.done, ms: p.ms, prog: p.prog || 0, off: p.connected === false })) });
 }
 
 function finishRound(room) {
@@ -114,18 +119,17 @@ function finishRound(room) {
     for (const p of room.players) {
       addHighscore({ name: p.name, score: p.total, difficulty: room.difficulty, date: new Date().toISOString().slice(0, 10), online: true });
     }
-    broadcast(room, { t: 'final', ranking, highscores });
+    room.finalMsg = { t: 'final', ranking, highscores };
+    broadcast(room, room.finalMsg);
   } else {
     setTimeout(() => { if (rooms.has(room.code) && room.state === 'between') startRound(room); }, 6000);
   }
 }
 
-function leaveRoom(ws) {
-  const room = ws.room;
-  if (!room) return;
-  const idx = room.players.findIndex(p => p.ws === ws);
+function removePlayer(room, player) {
+  const idx = room.players.indexOf(player);
   if (idx >= 0) room.players.splice(idx, 1);
-  ws.room = null;
+  if (player.ws) player.ws.room = null;
   if (room.players.length === 0) {
     clearTimeout(room.timer);
     rooms.delete(room.code);
@@ -134,6 +138,72 @@ function leaveRoom(ws) {
   if (!room.players.some(p => p.id === room.hostId)) room.hostId = room.players[0].id;
   broadcast(room, lobbyState(room));
   if (room.state === 'playing' && room.players.every(p => p.done)) finishRound(room);
+}
+
+function leaveRoom(ws) {
+  const room = ws.room;
+  if (!room) return;
+  const p = room.players.find(q => q.ws === ws);
+  ws.room = null;
+  if (p) removePlayer(room, p);
+}
+
+// Verbindungsverlust: Spieler bleibt im Raum und kann mit seinem Token
+// zurückkehren (Handy-Bildschirm aus, WLAN-Wackler, App-Wechsel …).
+const RECONNECT_GRACE_MS = 120000;
+
+function markDisconnected(ws) {
+  const room = ws.room;
+  if (!room) return;
+  const p = room.players.find(q => q.ws === ws);
+  ws.room = null;
+  if (!p) return;
+  p.connected = false;
+  p.disconnectedAt = Date.now();
+  p.ws = null;
+  if (room.players.every(q => q.connected === false)) return; // Sweeper räumt auf
+  broadcast(room, lobbyState(room));
+  if (room.state === 'playing') progress(room);
+}
+
+// Regelmäßig endgültig entfernen, wer zu lange weg ist
+setInterval(() => {
+  const now = Date.now();
+  for (const room of [...rooms.values()]) {
+    for (const p of [...room.players]) {
+      if (p.connected === false && now - p.disconnectedAt > RECONNECT_GRACE_MS) removePlayer(room, p);
+    }
+    if (room.players.length > 0 && room.players.every(p => p.connected === false) &&
+        room.players.every(p => now - p.disconnectedAt > RECONNECT_GRACE_MS)) {
+      clearTimeout(room.timer);
+      rooms.delete(room.code);
+    }
+  }
+}, 20000).unref();
+
+function rejoin(ws, token) {
+  for (const room of rooms.values()) {
+    const p = room.players.find(q => q.token === token);
+    if (!p) continue;
+    if (p.ws && p.ws !== ws) { try { p.ws.room = null; p.ws.close(); } catch { /* egal */ } }
+    p.ws = ws;
+    p.connected = true;
+    p.disconnectedAt = null;
+    ws.room = room;
+    send(ws, { t: 'you', id: p.id, token: p.token });
+    if (room.state === 'playing') {
+      const remaining = Math.max(5, Math.round(room.timeTotal - (Date.now() - room.roundAt) / 1000));
+      send(ws, { t: 'round', n: room.round, of: room.rounds, seed: p.seed, time: remaining,
+                 full: room.timeTotal, pieces: room.pieces,
+                 difficulty: room.difficulty, resumed: true, done: p.done, ms: p.ms });
+      send(ws, { t: 'progress', players: room.players.map(q => ({ id: q.id, name: q.name, done: q.done, ms: q.ms, prog: q.prog || 0, off: q.connected === false })) });
+    } else if (room.state === 'final' && room.finalMsg) {
+      send(ws, room.finalMsg);
+    }
+    broadcast(room, lobbyState(room));
+    return;
+  }
+  send(ws, { t: 'error', msg: 'Sitzung abgelaufen – bitte neu beitreten.', fatal: true });
 }
 
 const wss = new WebSocketServer({ server, path: '/ws' });
@@ -150,11 +220,12 @@ wss.on('connection', (ws) => {
         const code = newCode();
         const diff = DIFFICULTIES[msg.difficulty] ? msg.difficulty : 'mittel';
         const rounds = Math.min(9, Math.max(1, msg.rounds | 0)) || 3;
-        const player = { id: nextPlayerId++, ws, name: clean(msg.name) || 'Spieler', total: 0, gems: [], done: false, ms: null };
+        const player = { id: nextPlayerId++, ws, name: clean(msg.name) || 'Spieler', total: 0, gems: [],
+                         done: false, ms: null, token: crypto.randomBytes(12).toString('hex'), connected: true };
         const r = { code, players: [player], hostId: player.id, difficulty: diff, rounds, round: 0, state: 'lobby', timer: null };
         rooms.set(code, r);
         ws.room = r;
-        send(ws, { t: 'you', id: player.id });
+        send(ws, { t: 'you', id: player.id, token: player.token });
         broadcast(r, lobbyState(r));
         break;
       }
@@ -163,10 +234,11 @@ wss.on('connection', (ws) => {
         if (!r) { send(ws, { t: 'error', msg: 'Raum nicht gefunden.' }); return; }
         if (r.state !== 'lobby') { send(ws, { t: 'error', msg: 'Das Spiel läuft bereits.' }); return; }
         if (r.players.length >= 8) { send(ws, { t: 'error', msg: 'Der Raum ist voll (max. 8).' }); return; }
-        const player = { id: nextPlayerId++, ws, name: clean(msg.name) || 'Spieler', total: 0, gems: [], done: false, ms: null };
+        const player = { id: nextPlayerId++, ws, name: clean(msg.name) || 'Spieler', total: 0, gems: [],
+                         done: false, ms: null, token: crypto.randomBytes(12).toString('hex'), connected: true };
         r.players.push(player);
         ws.room = r;
-        send(ws, { t: 'you', id: player.id });
+        send(ws, { t: 'you', id: player.id, token: player.token });
         broadcast(r, lobbyState(r));
         break;
       }
@@ -176,6 +248,7 @@ wss.on('connection', (ws) => {
         if (!me || me.id !== room.hostId) return;
         if (DIFFICULTIES[msg.difficulty]) room.difficulty = msg.difficulty;
         if (msg.rounds) room.rounds = Math.min(9, Math.max(1, msg.rounds | 0));
+        if ([0.7, 1, 1.4].includes(+msg.timeFactor)) room.timeFactor = +msg.timeFactor;
         broadcast(room, lobbyState(room));
         break;
       }
@@ -193,7 +266,7 @@ wss.on('connection', (ws) => {
         const me = room.players.find(p => p.ws === ws);
         if (!me || me.done) return;
         me.done = true;
-        me.ms = Math.min(Math.max(0, msg.ms | 0), DIFFICULTIES[room.difficulty].time * 1000);
+        me.ms = Math.min(Math.max(0, msg.ms | 0), room.timeTotal * 1000);
         progress(room);
         if (room.players.every(p => p.done)) finishRound(room);
         break;
@@ -207,10 +280,22 @@ wss.on('connection', (ws) => {
         if (room.players.every(p => p.done)) finishRound(room);
         break;
       }
+      case 'prog': { // Live-Fortschritt (belegte Felder in Prozent)
+        if (!room || room.state !== 'playing') return;
+        const me = room.players.find(p => p.ws === ws);
+        if (!me || me.done) return;
+        const now = Date.now();
+        if (now - me.progAt < 800) return; // drosseln
+        me.progAt = now;
+        me.prog = Math.min(99, Math.max(0, msg.p | 0));
+        progress(room);
+        break;
+      }
+      case 'rejoin': rejoin(ws, String(msg.token || '')); break;
       case 'leave': leaveRoom(ws); break;
     }
   });
-  ws.on('close', () => leaveRoom(ws));
+  ws.on('close', () => markDisconnected(ws));
 });
 
 server.listen(PORT, () => {

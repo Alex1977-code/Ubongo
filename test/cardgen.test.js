@@ -1,5 +1,5 @@
 // Test: Karten-Generator erzeugt gültige, exakt lösbare Karten.
-import { generateCard, DIFFICULTIES } from '../public/js/cardgen.js';
+import { generateCard, DIFFICULTIES, roundSetup } from '../public/js/cardgen.js';
 import { PIECE_MAP } from '../public/js/pieces.js';
 
 let fails = 0;
@@ -38,5 +38,14 @@ for (const diff of Object.keys(DIFFICULTIES)) {
     assert(JSON.stringify(again) === JSON.stringify(card), `${diff}/${seed}: nicht deterministisch`);
   }
 }
+// Runden-Steigerung + Tempo-Faktor
+assert(roundSetup('leicht', 1).pieces === 3 && roundSetup('leicht', 3).pieces === 4 &&
+       roundSetup('leicht', 5).pieces === 5, 'Steigerung leicht: 3/4/5 Teile');
+assert(roundSetup('experte', 9).pieces === 6, 'Experte bleibt bei max. 6 Teilen');
+assert(roundSetup('leicht', 1, 0.7).time === 63 && roundSetup('leicht', 3, 1).time === 120,
+       'Tempo-Faktor skaliert die Zeit');
+const c5 = generateCard(4242, 'leicht', 5);
+assert(c5.pieces.length === 5, 'Teilanzahl-Vorgabe greift');
+
 console.log(fails === 0 ? 'cardgen: alle Tests OK (1000 Karten geprüft)' : `cardgen: ${fails} Fehler`);
 process.exit(fails === 0 ? 0 : 1);

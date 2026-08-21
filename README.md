@@ -43,9 +43,21 @@ Dann im Browser öffnen: **http://localhost:3000**
    geben den angezeigten **4-stelligen Code** ein
 5. Der Gastgeber wählt Schwierigkeit + Runden und startet
 
-Alternativ kann der Server auch im Internet gehostet werden (z. B. bei einem
-Node.js-Hoster) – dann funktioniert das Spielen auch über Mobilfunk.
-Der Port lässt sich über die Umgebungsvariable `PORT` ändern.
+### 🌍 Über das Internet spielen (auch über Mobilfunk)
+
+1. Server kostenlos hosten – am einfachsten bei [Render](https://render.com):
+   [![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/Alex1977-code/Ubongo)
+   (kostenloses Konto anlegen, deployen – die `render.yaml` im Repo stellt alles ein).
+   Danach hat der Server eine Adresse wie `ubongo-server.onrender.com`.
+2. Alle Mitspieler öffnen das Spiel (z. B. den GitHub-Pages-Link) und tragen
+   unter **„Mit Freunden spielen“ → Spiel-Server** dieselbe Adresse ein.
+3. Raum erstellen, Code weitergeben, losspielen.
+
+Hinweise: Der Gratis-Server schläft nach 15 Minuten Leerlauf ein – der erste
+Verbindungsaufbau dauert dann ca. 30 Sekunden. Die Online-Highscores liegen auf
+dem jeweiligen Server. Der Port lässt sich über die Umgebungsvariable `PORT`
+ändern; bricht die Verbindung ab (Bildschirm aus, WLAN-Wechsel), verbindet die
+App automatisch neu und setzt die laufende Runde fort.
 
 ### 📲 Als App installieren
 
