@@ -122,7 +122,7 @@ function finishRound(room) {
     room.finalMsg = { t: 'final', ranking, highscores };
     broadcast(room, room.finalMsg);
   } else {
-    setTimeout(() => { if (rooms.has(room.code) && room.state === 'between') startRound(room); }, 6000);
+    setTimeout(() => { if (rooms.has(room.code) && room.state === 'between') startRound(room); }, 10000);
   }
 }
 

@@ -67,6 +67,7 @@ export class Game {
     this.card = generateCard(seed, this.o.difficulty, this.roundPieces);
     $('game-round').textContent = `Runde ${this.round}/${this.o.rounds}`;
     document.querySelectorAll('.fly-gem').forEach(el => el.remove());
+    $('solution-note').classList.add('hidden');
     $('overlay-result').classList.add('hidden');
     $('overlay-final').classList.add('hidden');
     $('overlay-solved').classList.add('hidden');
@@ -194,7 +195,6 @@ export class Game {
   _endSoloRound() {
     clearInterval(this.timerIv);
     this.board.locked = true;
-    if (!this.myDone) this.board.reveal(this.card.solution); // zeigen, wie es ging
 
     const everyone = [
       { name: this.o.name, me: true, ms: this.myMs, done: this.myMs !== null },
@@ -208,7 +208,22 @@ export class Game {
       else { p.bot.total += p.points; p.bot.gems.push(...p.gems); p.total = p.bot.total; }
     }
     const mine = everyone[0];
-    this._celebrateGems(mine.gems, () => this._showRoundResult(everyone, true));
+    const showRes = () => this._celebrateGems(mine.gems, () => this._showRoundResult(everyone, true));
+    if (this.myMs == null) this._showSolution(showRes); // nicht gelöst: erst die Lösung zeigen
+    else showRes();
+  }
+
+  // Konnte der Spieler nicht lösen, wird die fertige Lösung ein paar Sekunden
+  // auf dem Brett gezeigt, bevor das Rundenergebnis erscheint.
+  _showSolution(then) {
+    const startedRound = this.round;
+    if (!this.board || !this.card.solution) { then(); return; }
+    this.board.reveal(this.card.solution);
+    $('solution-note').classList.remove('hidden');
+    setTimeout(() => {
+      $('solution-note').classList.add('hidden');
+      if (!this.destroyed && this.round === startedRound) then();
+    }, 3600);
   }
 
   // Gewonnene Edelsteine fallen sichtbar aufs Spielfeld und fliegen dann in
@@ -320,7 +335,9 @@ export class Game {
       this.myTotal = mine.total;
       this.myGems.push(...mine.gems);
     }
-    this._celebrateGems(mine ? mine.gems : [], () => this._showRoundResult(results, false));
+    const showRes = () => this._celebrateGems(mine ? mine.gems : [], () => this._showRoundResult(results, false));
+    if (this.myMs == null) this._showSolution(showRes); // nicht gelöst: erst die Lösung zeigen
+    else showRes();
   }
 
   onFinal(msg) {
@@ -381,6 +398,7 @@ export class Game {
     document.querySelectorAll('.fly-gem').forEach(el => el.remove());
     const shelf = $('gem-shelf');
     if (shelf) { shelf.classList.add('hidden'); shelf.innerHTML = ''; }
+    $('solution-note').classList.add('hidden');
     for (const id of ['overlay-countdown', 'overlay-solved', 'overlay-result', 'overlay-final'])
       $(id).classList.add('hidden');
   }

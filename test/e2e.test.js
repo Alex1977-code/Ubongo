@@ -137,6 +137,23 @@ try {
   assert(stats && stats.games === 1 && stats.solved >= 1,
     `Statistik erfasst (${stats && stats.games} Partie, ${stats && stats.solved} gelöst)`);
 
+  // ---------- Zeit abgelaufen: Lösung wird gezeigt ----------
+  await p.click('[data-goto="solo"]');
+  await p.click('#solo-diff .chip[data-val="leicht"]');
+  await p.click('#solo-rounds .chip[data-val="1"]');
+  await p.click('#solo-start');
+  await p.waitForFunction(() => window.__ubongo.game && !window.__ubongo.game.board.locked, null, { timeout: 8000 });
+  await p.evaluate(() => { const g = window.__ubongo.game; g.vElapsed = g.roundTime * 1000 + 500; }); // Zeit ablaufen lassen
+  await p.waitForSelector('#solution-note:not(.hidden)', { timeout: 4000 });
+  const revealed = await p.evaluate(() => window.__ubongo.game.board.pieces.every(q => q.placed));
+  assert(revealed, 'Nicht gelöst: Lösung liegt komplett auf dem Brett');
+  await p.waitForSelector('#overlay-result:not(.hidden)', { timeout: 9000 });
+  const noteHidden = await p.evaluate(() => document.getElementById('solution-note').classList.contains('hidden'));
+  assert(noteHidden, 'Lösungs-Hinweis verschwindet vor dem Ergebnis');
+  await p.click('#result-next');
+  await p.waitForSelector('#overlay-final:not(.hidden)');
+  await p.click('#final-menu');
+
   // ---------- Mehrspieler: 2 Handys ----------
   const A = await newPhone('Host'), B = await newPhone('Gast');
   await A.click('[data-goto="online"]');
