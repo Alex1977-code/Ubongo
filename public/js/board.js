@@ -127,11 +127,12 @@ export class BoardView {
       if (this.cells(p).some(([cx, cy]) => cx + p.placed.gx === gx && cy + p.placed.gy === gy)) return p;
     }
     for (const p of this.pieces) {
-      if (p.placed || p.drag) continue;
-      const t = p.tray;
-      if (this.cells(p).some(([cx, cy]) =>
-        x >= t.x + cx * t.cell - 9 && x <= t.x + (cx + 1) * t.cell + 9 &&
-        y >= t.y + cy * t.cell - 9 && y <= t.y + (cy + 1) * t.cell + 9)) return p;
+      if (p.placed || p.drag || !p.slot) continue;
+      // Ganzer Slot als Treffer-Fläche: Der Stammplatz bewegt sich nie,
+      // dadurch trifft jeder Tipp an derselben Stelle zuverlässig dasselbe
+      // Teil – egal, wie es gerade gedreht ist.
+      const s = p.slot;
+      if (x >= s.x - 4 && x <= s.x + s.px + 4 && y >= s.y - 4 && y <= s.y + s.px + 4) return p;
     }
     return null;
   }
@@ -382,13 +383,15 @@ export class BoardView {
         this._drawPiece(p, ox, oy, c, sel);
       }
     }
-    // Stammplätze in der Ablage dezent andeuten
+    // Stammplätze in der Ablage dezent andeuten; der aktive leuchtet
     for (const p of this.pieces) {
       if (!p.slot) continue;
+      const active = p.id === this.selectedId && !p.placed && !p.drag && !this.locked;
       ctx.save();
-      ctx.fillStyle = 'rgba(30, 10, 2, .18)';
-      ctx.strokeStyle = 'rgba(255, 214, 150, .12)';
-      ctx.lineWidth = 1.5;
+      ctx.fillStyle = active ? 'rgba(255, 211, 77, .14)' : 'rgba(30, 10, 2, .18)';
+      ctx.strokeStyle = active ? 'rgba(255, 227, 150, .85)' : 'rgba(255, 214, 150, .12)';
+      ctx.lineWidth = active ? 2.5 : 1.5;
+      if (active) { ctx.shadowColor = 'rgba(255, 211, 77, .5)'; ctx.shadowBlur = 10; }
       this._rr(ctx, p.slot.x - 4, p.slot.y - 4, p.slot.px + 8, p.slot.px + 8, 9);
       ctx.fill();
       ctx.stroke();

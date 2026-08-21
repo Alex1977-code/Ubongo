@@ -60,6 +60,11 @@ try {
   await p.mouse.down(); await p.mouse.up();
   const after = await p.evaluate(() => window.__ubongo.game.board.pieces[0].rot);
   assert(after === (before + 1) % 4, `Zweiter Tipp dreht Teil (${before}→${after})`);
+  // Dritter Tipp an exakt derselben Stelle: dreht weiter, obwohl sich die
+  // Teil-Form gedreht hat (ganzer Slot ist Treffer-Fläche)
+  await p.mouse.down(); await p.mouse.up();
+  const after3 = await p.evaluate(() => window.__ubongo.game.board.pieces[0].rot);
+  assert(after3 === (before + 2) % 4, `Dritter Tipp dreht weiter (${after}→${after3})`);
 
   // Tipp-Funktion kostet 5 Punkte
   await p.click('#ctrl-solution');
