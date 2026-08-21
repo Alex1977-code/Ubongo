@@ -1,5 +1,5 @@
 // Spielbrett-Ansicht: zeichnet Karte + Teile auf Canvas und verarbeitet Touch-Eingaben.
-// Ziehen = bewegen, Tippen = drehen, Doppeltipp = spiegeln, Einrasten am Raster.
+// Ziehen = bewegen · Tippen = auswählen, erneut tippen = drehen · Einrasten am Raster.
 
 import { PIECE_MAP, transform, bounds } from './pieces.js';
 import * as snd from './sound.js';
@@ -28,7 +28,6 @@ export class BoardView {
       id, i, color: PIECE_MAP[id].color, base: PIECE_MAP[id].cells,
       rot: 0, flip: 0, placed: null, tray: { x: 0, y: 0 }, drag: null,
     }));
-    this._tap = { time: 0, id: null };
     this._raf = 0;
     this._onResize = () => this.layout();
     window.addEventListener('resize', this._onResize);
@@ -159,6 +158,7 @@ export class BoardView {
     if (!p) return;
     e.preventDefault();
     this.canvas.setPointerCapture(e.pointerId);
+    const wasSelected = this.selectedId === p.id;
     this.selectedId = p.id;
     const wasPlaced = p.placed;
     const b = bounds(this.cells(p));
@@ -176,7 +176,7 @@ export class BoardView {
     relY = Math.max(0.2, Math.min(b.h - 0.2, relY));
     p.drag = {
       pointerId: e.pointerId, x, y, startX: x, startY: y, t0: performance.now(),
-      wasPlaced: wasPlaced ? { ...wasPlaced } : null, moved: false,
+      wasPlaced: wasPlaced ? { ...wasPlaced } : null, wasSelected, moved: false,
       ox: -relX * this.cell, oy: -relY * this.cell - this.cell * 1.1,
     };
     p.placed = null;
@@ -207,11 +207,13 @@ export class BoardView {
     if (cancel) { p.placed = d.wasPlaced; this._after(); return; }
 
     if (quick) {
-      // Tippen: drehen · Doppeltipp: spiegeln
-      const now = performance.now();
-      const dbl = this._tap.id === p.id && now - this._tap.time < 380;
-      this._tap = { time: now, id: p.id };
-      this._transform(p, d.wasPlaced, dbl ? 'flip' : 'rot');
+      // Erster Tipp wählt das Teil nur aus – erst weitere Tipps drehen es.
+      if (d.wasSelected) {
+        this._transform(p, d.wasPlaced, 'rot');
+      } else {
+        p.placed = d.wasPlaced; // nur auswählen, nichts verändern
+        snd.pickup();
+      }
       this._after();
       return;
     }

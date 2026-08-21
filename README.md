@@ -13,7 +13,7 @@ Solo-Modus sogar offline.
 - **Highscores:** lokal auf dem Handy **und** online auf dem Server (Top 50)
 - **Unendlich viele Karten:** prozeduraler Karten-Generator – jede Karte ist garantiert lösbar
 - **4 Schwierigkeitsgrade:** Leicht (3 Teile) · Mittel (4) · Schwer (5) · Experte (6)
-- **Touch-Steuerung:** Ziehen = bewegen · Tippen = drehen · Doppeltipp = spiegeln
+- **Touch-Steuerung:** Ziehen = bewegen · Tippen = auswählen, erneut tippen = drehen · Spiegeln per Knopf
 - **Sound & Musik:** prozedurale Sound-Effekte per WebAudio (Klick, Klack, Countdown,
   Fanfaren, 10-Sekunden-Warnton – ganz ohne Audio-Dateien) und eine leise
   Kalimba-Ambient-Musik. Beides im Spiel einzeln abschaltbar: 🔊/🔇 für Effekte,

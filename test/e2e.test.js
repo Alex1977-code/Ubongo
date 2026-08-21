@@ -44,7 +44,7 @@ try {
   const nPieces = await p.evaluate(() => window.__ubongo.game.board.pieces.length);
   assert(nPieces === 3, `Leicht = 3 Teile (${nPieces})`);
 
-  // Tippen dreht ein Teil
+  // Erster Tipp wählt nur aus, zweiter Tipp dreht
   const before = await p.evaluate(() => window.__ubongo.game.board.pieces[0].rot);
   const pos = await p.evaluate(() => {
     const b = window.__ubongo.game.board;
@@ -54,8 +54,12 @@ try {
   });
   await p.mouse.move(pos.x, pos.y);
   await p.mouse.down(); await p.mouse.up();
+  const afterFirst = await p.evaluate(() => ({ rot: window.__ubongo.game.board.pieces[0].rot,
+    sel: window.__ubongo.game.board.selectedId === window.__ubongo.game.board.pieces[0].id }));
+  assert(afterFirst.rot === before && afterFirst.sel, `Erster Tipp wählt nur aus (rot ${before}→${afterFirst.rot})`);
+  await p.mouse.down(); await p.mouse.up();
   const after = await p.evaluate(() => window.__ubongo.game.board.pieces[0].rot);
-  assert(after === (before + 1) % 4, `Tippen dreht Teil (${before}→${after})`);
+  assert(after === (before + 1) % 4, `Zweiter Tipp dreht Teil (${before}→${after})`);
 
   // Tipp-Funktion kostet 5 Punkte
   await p.click('#ctrl-solution');
