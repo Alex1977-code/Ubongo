@@ -219,7 +219,7 @@ wss.on('connection', (ws) => {
       case 'create': {
         const code = newCode();
         const diff = DIFFICULTIES[msg.difficulty] ? msg.difficulty : 'mittel';
-        const rounds = Math.min(9, Math.max(1, msg.rounds | 0)) || 3;
+        const rounds = Math.min(9, Math.max(1, msg.rounds | 0)) || 9;
         const player = { id: nextPlayerId++, ws, name: clean(msg.name) || 'Spieler', total: 0, gems: [],
                          done: false, ms: null, token: crypto.randomBytes(12).toString('hex'), connected: true };
         const r = { code, players: [player], hostId: player.id, difficulty: diff, rounds, round: 0, state: 'lobby', timer: null };
