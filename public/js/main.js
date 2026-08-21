@@ -192,6 +192,7 @@ async function connect() {
      .on('room', (msg) => renderLobby(msg))
      .on('error', (msg) => {
        $('online-status').textContent = msg.msg;
+       if (document.querySelector('#screen-lobby.active')) $('lobby-status').textContent = msg.msg;
        if (msg.fatal) endGame('online');
      })
      .on('round', (msg) => {
@@ -256,6 +257,14 @@ function renderLobby(msg) {
     `${p.host ? '<span class="badge">Gastgeber</span>' : ''}</li>`).join('');
   $('lobby-host-controls').classList.toggle('hidden', !isHost);
   $('lobby-wait').classList.toggle('hidden', isHost);
+  // Start erst ab 2 Spielern - vorher klar machen, worauf gewartet wird
+  const alone = msg.players.length < 2;
+  const startBtn = $('lobby-start');
+  startBtn.disabled = alone;
+  startBtn.textContent = alone ? '⏳ Warten auf Mitspieler …' : 'Spiel starten';
+  $('lobby-status').textContent = alone
+    ? 'Mindestens 2 Spieler nötig – gib den Raumcode weiter! Deine Freunde brauchen denselben Spiel-Link und dieselbe Server-Adresse.'
+    : '';
   // Host-Auswahl synchron halten
   document.querySelectorAll('#lobby-diff .chip').forEach(c => c.classList.toggle('active', c.dataset.val === msg.difficulty));
   document.querySelectorAll('#lobby-rounds .chip').forEach(c => c.classList.toggle('active', c.dataset.val === String(msg.rounds)));

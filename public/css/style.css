@@ -215,3 +215,5 @@ body {
   animation: bannerPulse 1.6s infinite; }
 @keyframes bannerPulse { 50% { opacity: .65; } }
 .player-list li.offline { opacity: .55; }
+
+.btn:disabled { opacity: .55; pointer-events: none; }
