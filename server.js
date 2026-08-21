@@ -37,7 +37,8 @@ const MIME = {
 const server = http.createServer((req, res) => {
   const url = new URL(req.url, 'http://x');
   if (url.pathname === '/api/highscores') {
-    res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+    res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store',
+                         'Access-Control-Allow-Origin': '*' });
     res.end(JSON.stringify(highscores));
     return;
   }

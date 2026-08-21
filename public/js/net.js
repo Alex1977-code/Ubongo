@@ -5,10 +5,25 @@ export class Net {
 
   on(type, fn) { this.handlers[type] = fn; return this; }
 
-  connect() {
-    return new Promise((resolve, reject) => {
+  // Basis-Adresse eines Spiel-Servers in eine WebSocket-URL übersetzen.
+  static wsUrl(base) {
+    if (!base) {
       const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const ws = new WebSocket(`${proto}//${location.host}/ws`);
+      return `${proto}//${location.host}/ws`;
+    }
+    let s = String(base).trim().replace(/\/+$/, '');
+    if (!/^https?:\/\//.test(s)) {
+      // nackte Adresse: lokale IPs über http/ws, alles andere über https/wss
+      const local = /^(localhost|\d+\.\d+\.\d+\.\d+)(:\d+)?$/.test(s);
+      s = (local ? 'http://' : 'https://') + s;
+    }
+    const u = new URL(s);
+    return `${u.protocol === 'http:' ? 'ws:' : 'wss:'}//${u.host}/ws`;
+  }
+
+  connect(base) {
+    return new Promise((resolve, reject) => {
+      const ws = new WebSocket(Net.wsUrl(base));
       const timeout = setTimeout(() => { ws.close(); reject(new Error('timeout')); }, 6000);
       ws.onopen = () => { clearTimeout(timeout); this.ws = ws; resolve(); };
       ws.onerror = () => { clearTimeout(timeout); reject(new Error('Verbindung fehlgeschlagen')); };

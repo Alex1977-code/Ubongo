@@ -2,7 +2,7 @@
 
 import { Game } from './game.js';
 import { Net } from './net.js';
-import { localScores, onlineScores, getName, setName } from './highscore.js';
+import { localScores, onlineScores, getName, setName, getServer, setServer } from './highscore.js';
 import { unlock, isMuted, toggleMuted, isMusicOn, toggleMusic } from './sound.js';
 
 const $ = (id) => document.getElementById(id);
@@ -75,6 +75,11 @@ for (const id of ['solo-name', 'online-name']) {
   $(id).value = getName();
   $(id).addEventListener('input', () => setName($(id).value.trim()));
 }
+
+// Spiel-Server-Adresse (für Spiele übers Internet) vorbelegen und merken
+$('online-server').value = getServer();
+$('online-server').addEventListener('input', () => setServer($('online-server').value.trim()));
+const serverBase = () => $('online-server').value.trim();
 
 // ---------- Spiel-Lebenszyklus ----------
 let game = null;
@@ -160,7 +165,7 @@ async function connect() {
      .on('roundResult', (msg) => game && game.onRoundResult(msg))
      .on('final', (msg) => game && game.onFinal(msg))
      .on('_close', () => handleDisconnect());
-  await net.connect();
+  await net.connect(serverBase());
   return net;
 }
 
@@ -173,7 +178,9 @@ $('online-create').addEventListener('click', async () => {
     net.send({ t: 'create', name, difficulty: 'mittel', rounds: 3 });
     $('online-status').textContent = '';
   } catch {
-    $('online-status').textContent = 'Kein Server erreichbar. Läuft der Ubongo-Server? (siehe Anleitung)';
+    $('online-status').textContent = serverBase()
+      ? 'Server nicht erreichbar – Adresse prüfen (gehostete Gratis-Server brauchen beim Aufwachen ca. 30 s, einfach nochmal tippen).'
+      : 'Kein Server erreichbar. Im WLAN die Server-Adresse direkt öffnen oder unten einen Spiel-Server eintragen.';
   }
 });
 
@@ -188,7 +195,9 @@ $('online-join').addEventListener('click', async () => {
     net.send({ t: 'join', code, name });
     $('online-status').textContent = '';
   } catch {
-    $('online-status').textContent = 'Kein Server erreichbar. Läuft der Ubongo-Server? (siehe Anleitung)';
+    $('online-status').textContent = serverBase()
+      ? 'Server nicht erreichbar – Adresse prüfen (gehostete Gratis-Server brauchen beim Aufwachen ca. 30 s, einfach nochmal tippen).'
+      : 'Kein Server erreichbar. Im WLAN die Server-Adresse direkt öffnen oder unten einen Spiel-Server eintragen.';
   }
 });
 
@@ -272,7 +281,7 @@ async function renderScores(which) {
   if (which === 'local') list = localScores();
   else {
     table.innerHTML = '<tr><td>Lade …</td></tr>';
-    try { list = await onlineScores(); }
+    try { list = await onlineScores(getServer()); }
     catch {
       table.innerHTML = '';
       empty.classList.remove('hidden');
