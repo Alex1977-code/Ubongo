@@ -219,7 +219,7 @@ $('online-create').addEventListener('click', async () => {
   $('online-status').textContent = 'Verbinde …';
   try {
     await connect();
-    net.send({ t: 'create', name, difficulty: 'mittel', rounds: 3 });
+    net.send({ t: 'create', name, difficulty: 'mittel', rounds: 9 });
     $('online-status').textContent = '';
   } catch {
     $('online-status').textContent = serverBase()
