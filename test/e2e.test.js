@@ -59,7 +59,7 @@ try {
 
   // Tipp-Funktion kostet 5 Punkte
   await p.click('#ctrl-solution');
-  assert(await p.evaluate(() => window.__ubongo.game.hintUsed) === true, 'Tipp gemerkt (kostet den Bernstein)');
+  assert(await p.evaluate(() => window.__ubongo.game.hintUsed) === true, 'Tipp gemerkt (kostet den Zufallsstein)');
 
   // Ein Teil per Drag korrekt platzieren (echte Geste)
   const drag = await p.evaluate(() => {

@@ -3,22 +3,26 @@
 // Funkeln) und sowohl vom Client (Anzeige) als auch vom Server (Wertung) genutzt.
 
 export const GEMS = {
-  saphir:    { value: 4, name: 'Saphir',    c1: '#9ec8ff', c2: '#2f6fed', c3: '#0d2f86' },
-  rubin:     { value: 3, name: 'Rubin',     c1: '#ff9a9a', c2: '#e0223a', c3: '#7c0a1e' },
-  smaragd:   { value: 2, name: 'Smaragd',   c1: '#9af0bc', c2: '#1fa860', c3: '#07502c' },
-  bernstein: { value: 1, name: 'Bernstein', c1: '#ffe3a1', c2: '#f5a623', c3: '#8a5106' },
+  rubin:     { value: 4, name: 'Rubin (rot)',        c1: '#ff9a9a', c2: '#e0223a', c3: '#7c0a1e' },
+  saphir:    { value: 3, name: 'Saphir (blau)',      c1: '#9ec8ff', c2: '#2f6fed', c3: '#0d2f86' },
+  smaragd:   { value: 2, name: 'Smaragd (grün)',     c1: '#9af0bc', c2: '#1fa860', c3: '#07502c' },
+  bernstein: { value: 1, name: 'Bernstein (braun)',  c1: '#eab36e', c2: '#a9672a', c3: '#553008' },
 };
 
-// Edelstein-Vergabe pro Runde:
-//  Schnellster: Saphir (4) · Zweiter: Rubin (3) · Dritter: Smaragd (2)
-//  Jeder Löser zusätzlich: Bernstein (1) – entfällt, wenn der Tipp benutzt wurde.
-export function roundGems(rank, solved, hintUsed = false) {
+const TYPES = ['rubin', 'saphir', 'smaragd', 'bernstein'];
+
+// Edelstein-Vergabe pro Runde (wie im Original):
+//  Nur wer VOR Ablauf der Zeit löst, bekommt etwas.
+//  Schnellster: blauer Saphir + 1 zufälliger Stein
+//  Zweiter:     brauner Bernstein + 1 zufälliger Stein
+//  Alle weiteren Löser: 1 zufälliger Stein
+//  Wurde der 💡-Tipp benutzt, entfällt der zufällige Stein.
+export function roundGems(rank, solved, hintUsed = false, rand = Math.random) {
   if (!solved) return [];
   const g = [];
   if (rank === 0) g.push('saphir');
-  else if (rank === 1) g.push('rubin');
-  else if (rank === 2) g.push('smaragd');
-  if (!hintUsed) g.push('bernstein');
+  else if (rank === 1) g.push('bernstein');
+  if (!hintUsed) g.push(TYPES[Math.floor(rand() * TYPES.length)]);
   return g;
 }
 
@@ -80,7 +84,7 @@ export function gemRow(gems, size = 18) {
   if (!gems || gems.length === 0) return '<span class="gem-none">–</span>';
   const count = {};
   for (const t of gems) count[t] = (count[t] || 0) + 1;
-  return ['saphir', 'rubin', 'smaragd', 'bernstein']
+  return ['rubin', 'saphir', 'smaragd', 'bernstein']
     .filter(t => count[t])
     .map(t => `<span class="gem-group">${gemSVG(t, size)}${count[t] > 1 ? `<b>×${count[t]}</b>` : ''}</span>`)
     .join('');
