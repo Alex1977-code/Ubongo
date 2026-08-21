@@ -36,6 +36,7 @@ export class BoardView {
     canvas.addEventListener('pointermove', e => this._move(e));
     canvas.addEventListener('pointerup', e => this._up(e));
     canvas.addEventListener('pointercancel', e => this._up(e, true));
+    canvas.addEventListener('lostpointercapture', e => this._up(e, true));
 
     this.layout();
     const loop = () => { this.draw(); this._raf = requestAnimationFrame(loop); };
@@ -127,7 +128,7 @@ export class BoardView {
       if (this.cells(p).some(([cx, cy]) => cx + p.placed.gx === gx && cy + p.placed.gy === gy)) return p;
     }
     for (const p of this.pieces) {
-      if (p.placed || p.drag || !p.slot) continue;
+      if (p.placed || (p.drag && p.drag.moved) || !p.slot) continue;
       // Ganzer Slot als Treffer-Fläche: Der Stammplatz bewegt sich nie,
       // dadurch trifft jeder Tipp an derselben Stelle zuverlässig dasselbe
       // Teil – egal, wie es gerade gedreht ist.
@@ -149,8 +150,17 @@ export class BoardView {
       const dp = this.dragPiece;
       if (dp.drag && e.pointerId !== dp.drag.pointerId) {
         e.preventDefault();
-        dp.rot = (dp.rot + 1) % 4;
-        snd.rotate();
+        if (dp.drag.moved) {
+          dp.rot = (dp.rot + 1) % 4; // frei in der Hand: einfach drehen
+          snd.rotate();
+        } else {
+          // Teil liegt noch (Brett oder Ablage): über die reguläre
+          // Dreh-Logik, damit nichts illegal überlappt
+          const wasPlaced = dp.placed ? { ...dp.placed } : null;
+          dp.placed = null;
+          this._transform(dp, wasPlaced, 'rot');
+          this._after();
+        }
       }
       return;
     }
@@ -180,9 +190,9 @@ export class BoardView {
       wasPlaced: wasPlaced ? { ...wasPlaced } : null, wasSelected, moved: false,
       ox: -relX * this.cell, oy: -relY * this.cell - this.cell * 1.1,
     };
-    p.placed = null;
+    // Das Teil bleibt liegen, bis wirklich gezogen wird – ein Tipp soll es
+    // nicht anheben oder verschieben.
     this.dragPiece = p;
-    this._layoutTray();
   }
 
   _move(e) {
@@ -191,8 +201,11 @@ export class BoardView {
     e.preventDefault();
     const { x, y } = this._pos(e);
     p.drag.x = x; p.drag.y = y;
-    if (!p.drag.moved && Math.hypot(x - p.drag.startX, y - p.drag.startY) > 12) {
+    const threshold = Math.max(16, this.cell * 0.3); // fingerfreundlich
+    if (!p.drag.moved && Math.hypot(x - p.drag.startX, y - p.drag.startY) > threshold) {
       p.drag.moved = true;
+      p.placed = null; // erst jetzt vom Brett abheben
+      this._layoutTray();
       snd.pickup();
     }
   }
@@ -201,7 +214,7 @@ export class BoardView {
     const p = this.dragPiece;
     if (!p || !p.drag || e.pointerId !== p.drag.pointerId) return;
     const d = p.drag;
-    const quick = !d.moved && performance.now() - d.t0 < 400;
+    const quick = !d.moved; // Tipp = keine Bewegung, Druckdauer egal
     p.drag = null;
     this.dragPiece = null;
 
@@ -386,7 +399,7 @@ export class BoardView {
     // Stammplätze in der Ablage dezent andeuten; der aktive leuchtet
     for (const p of this.pieces) {
       if (!p.slot) continue;
-      const active = p.id === this.selectedId && !p.placed && !p.drag && !this.locked;
+      const active = p.id === this.selectedId && !p.placed && !(p.drag && p.drag.moved) && !this.locked;
       ctx.save();
       ctx.fillStyle = active ? 'rgba(255, 211, 77, .14)' : 'rgba(30, 10, 2, .18)';
       ctx.strokeStyle = active ? 'rgba(255, 227, 150, .85)' : 'rgba(255, 214, 150, .12)';
@@ -397,14 +410,15 @@ export class BoardView {
       ctx.stroke();
       ctx.restore();
     }
-    // Ablage-Teile (jedes zentriert in seinem festen Slot)
+    // Ablage-Teile (jedes zentriert in seinem festen Slot); ein nur
+    // gehaltenes (noch nicht gezogenes) Teil bleibt normal liegen
     for (const p of this.pieces) {
-      if (p.placed || p.drag) continue;
+      if (p.placed || (p.drag && p.drag.moved)) continue;
       this._drawPiece(p, p.tray.x, p.tray.y, p.tray.cell, p.id === this.selectedId);
     }
     // Gezogenes Teil zuletzt (über allem, mit Schatten)
     const dp = this.dragPiece;
-    if (dp && dp.drag) {
+    if (dp && dp.drag && dp.drag.moved) {
       const ctx2 = this.ctx;
       ctx2.save();
       ctx2.shadowColor = 'rgba(0,0,0,.5)';
