@@ -136,6 +136,7 @@
       <p class="subtitle">Das wilde Legespiel</p>
     </div>
     <nav class="menu">
+      <button class="btn btn-big btn-primary hidden" id="quick-start">⚡ Schnellstart</button>
       <button class="btn btn-big btn-primary" data-goto="solo">🤖 Gegen Computer</button>
       <button class="btn btn-big btn-secondary" data-goto="online">📱 Mit Freunden spielen</button>
       <button class="btn btn-big" data-goto="scores">🏆 Highscores</button>
@@ -299,8 +300,9 @@
     <header class="top"><button class="btn btn-back" data-goto="start">‹</button><h2>Highscores</h2></header>
     <div class="panel">
       <div class="tabs">
-        <button class="tab active" data-tab="local">📱 Dieses Handy</button>
+        <button class="tab active" data-tab="local">📱 Handy</button>
         <button class="tab" data-tab="online">🌍 Online</button>
+        <button class="tab" data-tab="stats">📊 Stats</button>
       </div>
       <table class="score-table" id="score-table"></table>
       <p class="status hidden" id="scores-empty">Noch keine Einträge – spiel eine Partie!</p>

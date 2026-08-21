@@ -4,7 +4,7 @@
 import { generateCard, DIFFICULTIES, roundSetup } from './cardgen.js';
 import { BoardView } from './board.js';
 import { makeBots, newRound, botProgress, botTick } from './ai.js';
-import { addLocalScore } from './highscore.js';
+import { addLocalScore, recordSolve, recordMatch } from './highscore.js';
 import { roundGems, gemPoints, gemSVG, gemRow } from './gems.js';
 import * as snd from './sound.js';
 
@@ -49,6 +49,11 @@ export class Game {
     this.diff = DIFFICULTIES[msg.difficulty];
     this.roundPieces = msg.pieces;
     this.roundTime = msg.full || msg.time; // volle Rundenzeit (bei Rückkehr: full)
+    if (msg.n === 1 && !msg.resumed) { // neue Partie ("Nochmal spielen"): Schatz leeren
+      this.myTotal = 0;
+      this.myGems = [];
+      this._renderShelf();
+    }
     this._beginRound(msg.seed, msg.resumed ? msg : null);
   }
 
@@ -178,6 +183,7 @@ export class Game {
     this.myMs = this.mode === 'solo' ? Math.round(this.vElapsed) : Math.round(performance.now() - this.t0);
     $('overlay-solved').classList.remove('hidden');
     setTimeout(() => $('overlay-solved').classList.add('hidden'), 1600);
+    recordSolve(this.myMs);
     snd.solve(); // UBONGO!-Fanfare
     confetti($('confetti'));
     if (navigator.vibrate) navigator.vibrate([60, 40, 120]);
@@ -287,6 +293,7 @@ export class Game {
     ].sort((a, b) => b.total - a.total);
     addLocalScore({ name: this.o.name, score: this.myTotal, difficulty: this.o.difficulty,
                     date: new Date().toISOString().slice(0, 10) });
+    recordMatch({ won: !!ranking[0].me, points: this.myTotal, gems: this.myGems });
     this._showFinal(ranking, 'Highscore auf diesem Handy gespeichert! ⭐');
     if (ranking[0].me) confetti($('confetti'), 140);
   }
@@ -319,6 +326,7 @@ export class Game {
   onFinal(msg) {
     $('overlay-result').classList.add('hidden');
     const ranking = msg.ranking.map(r => ({ name: r.name, me: r.id === this.o.net.myId, total: r.total, gems: r.gems }));
+    recordMatch({ won: !!ranking[0]?.me, points: this.myTotal, gems: this.myGems });
     this._showFinal(ranking, 'Im Online-Highscore gespeichert! 🌍');
     if (ranking[0]?.me) confetti($('confetti'), 140);
   }

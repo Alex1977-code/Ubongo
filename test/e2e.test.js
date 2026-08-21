@@ -131,6 +131,11 @@ try {
   assert(hs && hs.length === 1 && hs[0].name === 'Alex' && hs[0].score > 0, `Lokaler Highscore gespeichert (${hs && hs[0] && hs[0].score} Pkt.)`);
   await p.screenshot({ path: SHOT_DIR + '/shot-final.png' });
   await p.click('#final-menu');
+  const quickVisible = await p.evaluate(() => !document.getElementById('quick-start').classList.contains('hidden'));
+  assert(quickVisible, 'Schnellstart-Knopf nach erster Partie sichtbar');
+  const stats = await p.evaluate(() => JSON.parse(localStorage.getItem('ubongo.stats')));
+  assert(stats && stats.games === 1 && stats.solved >= 1,
+    `Statistik erfasst (${stats && stats.games} Partie, ${stats && stats.solved} gelöst)`);
 
   // ---------- Mehrspieler: 2 Handys ----------
   const A = await newPhone('Host'), B = await newPhone('Gast');
