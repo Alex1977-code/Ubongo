@@ -20,7 +20,13 @@ const newPhone = async (name) => {
   const page = await ctx.newPage();
   page.errors = [];
   page.on('pageerror', e => page.errors.push(name + ': ' + e.message));
-  page.on('console', m => { if (m.type() === 'error') page.errors.push(name + ' console: ' + m.text()); });
+  page.on('console', m => {
+    if (m.type() !== 'error') return;
+    // Optionale Bild-Assets (img/…) dürfen fehlen – deren 404 ist kein Fehler.
+    const url = (m.location() && m.location().url) || '';
+    if (url.includes('/img/')) return;
+    page.errors.push(name + ' console: ' + m.text());
+  });
   await page.goto(`http://localhost:${PORT}/`);
   return page;
 };
@@ -120,7 +126,7 @@ try {
   });
   await p.waitForSelector('#overlay-result:not(.hidden)', { timeout: 10000 });
   assert(true, 'Runden-Ergebnis erscheint');
-  const gemsInTable = await p.evaluate(() => document.querySelectorAll('#result-table svg.gem').length);
+  const gemsInTable = await p.evaluate(() => document.querySelectorAll('#result-table svg.gem, #result-table img.gem').length);
   assert(gemsInTable > 0, `Edelsteine im Rundenergebnis sichtbar (${gemsInTable})`);
   const shelfShown = await p.evaluate(() => !document.getElementById('gem-shelf').classList.contains('hidden'));
   assert(shelfShown, 'Schatzleiste im Spielfeld sichtbar');
@@ -153,6 +159,38 @@ try {
   await p.click('#result-next');
   await p.waitForSelector('#overlay-final:not(.hidden)');
   await p.click('#final-menu');
+
+  // ---------- Design-Menü: Themen + Teile-Looks ----------
+  await p.click('#open-design');
+  await p.waitForSelector('#overlay-design:not(.hidden)');
+  await p.screenshot({ path: SHOT_DIR + '/shot-design-menu.png' });
+  await p.click('#design-theme .chip[data-val="dschungel"]');
+  await p.click('#design-skin .chip[data-val="juwelen"]');
+  await p.click('#design-close');
+  const design = await p.evaluate(() => ({
+    theme: localStorage.getItem('ubongo.theme'), skin: localStorage.getItem('ubongo.skin'),
+    cls: document.body.classList.contains('theme-dschungel'),
+  }));
+  assert(design.theme === 'dschungel' && design.skin === 'juwelen' && design.cls,
+    'Design-Auswahl gespeichert + Dschungel-Thema sofort aktiv');
+  await p.screenshot({ path: SHOT_DIR + '/shot-theme-dschungel.png' });
+  await p.reload();
+  await p.waitForSelector('#screen-start.active');
+  assert(await p.evaluate(() => document.body.classList.contains('theme-dschungel')),
+    'Dschungel-Thema übersteht Neuladen');
+  await p.click('[data-goto="solo"]');
+  await p.click('#solo-start');
+  await p.waitForFunction(() => window.__ubongo.game && window.__ubongo.game.board &&
+    !window.__ubongo.game.board.locked, null, { timeout: 8000 });
+  assert(true, 'Spiel startet mit Dschungel-Thema + Juwelen-Look');
+  await p.screenshot({ path: SHOT_DIR + '/shot-skin-juwelen.png' });
+  await p.click('#game-exit');
+  await p.click('#open-design');
+  await p.waitForSelector('#overlay-design:not(.hidden)');
+  await p.click('#design-theme .chip[data-val="wueste"]');
+  await p.click('#design-close');
+  await p.screenshot({ path: SHOT_DIR + '/shot-theme-wueste.png' });
+  await p.evaluate(() => { localStorage.setItem('ubongo.theme', 'savanne'); localStorage.setItem('ubongo.skin', 'klassisch'); });
 
   // ---------- Mehrspieler: 2 Handys ----------
   const A = await newPhone('Host'), B = await newPhone('Gast');

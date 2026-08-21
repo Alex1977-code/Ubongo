@@ -13,10 +13,11 @@ const SKILL = {
 };
 
 export function makeBots(count, skill, roundTimeSec) {
-  const pool = NAMES.slice().sort(() => Math.random() - 0.5);
+  // avatar = feste Nummer je Tier (1–8) → passt zu img/avatar-N.png, falls vorhanden
+  const pool = NAMES.map(([name, emoji], i) => [name, emoji, i + 1]).sort(() => Math.random() - 0.5);
   return Array.from({ length: count }, (_, i) => {
-    const [name, emoji] = pool[i];
-    return { name, emoji, skill, total: 0, bot: true, id: 'bot' + i, ...newRound(skill, roundTimeSec) };
+    const [name, emoji, avatar] = pool[i];
+    return { name, emoji, avatar, skill, total: 0, bot: true, id: 'bot' + i, ...newRound(skill, roundTimeSec) };
   });
 }
 

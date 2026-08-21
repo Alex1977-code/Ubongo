@@ -19,7 +19,11 @@ Solo-Modus sogar offline.
   Kalimba-Ambient-Musik. Beides im Spiel einzeln abschaltbar: 🔊/🔇 für Effekte,
   🎵 für Musik – die Einstellung wird gespeichert
 - **Stimmungsvolle Grafik:** Savannen-Abendszene auf dem Startbildschirm (Inline-SVG),
-  Glühwürmchen, Holz-Sockel unter der Karte, Setz-Animation beim Einrasten
+  Glühwürmchen, Holz-Sockel unter der Karte, Setz-Animation beim Einrasten,
+  funkelnde Rohkristall-Edelsteine
+- **Design-Menü (🎨):** Themen (Savanne · Dschungel bei Nacht · Wüste) und
+  Teile-Looks (Klassisch · Juwelen · Bonbon · Holz) umschaltbar; eigene Bilder
+  aus `public/img/` werden automatisch eingebunden (siehe unten)
 - **Extras:** Countdown, Konfetti, „UBONGO!“-Ruf, Tipp-Funktion (💡, kostet 5 Punkte),
   Vibration beim Lösen, KI-Gegner mit sichtbarem Fortschritt
 
@@ -113,8 +117,29 @@ public/
   sw.js              Service Worker (offline)
 ```
 
-## 🎨 Eigene Grafiken
+## 🎨 Eigene Grafiken (KI-generiert)
 
-Alle Grafiken sind aktuell im Code gezeichnet (SVG/Canvas). Eigene Bilder –
-Logo, Hintergrund, App-Icon – können einfach unter `public/icons/` bzw. per CSS
-eingebunden werden.
+Alle Grafiken sind im Code gezeichnet (SVG/Canvas) – die App braucht keine
+Bilddateien. Wer mag, legt eigene (z. B. KI-generierte) PNGs in `public/img/`;
+sie werden beim Start **automatisch erkannt und verwendet**. Fehlt eine Datei,
+bleibt einfach die prozedurale Grafik aktiv. Unterstützte Dateinamen:
+
+| Datei | Verwendung |
+| --- | --- |
+| `bg-menu.png` | Hintergrund des Startbildschirms (ersetzt die SVG-Savannenszene) |
+| `bg-game.png` | Hintergrund des Spielbildschirms |
+| `bg-menu-dschungel.png` / `bg-game-dschungel.png` | Hintergründe für das Thema „Dschungel bei Nacht“ |
+| `bg-menu-wueste.png` / `bg-game-wueste.png` | Hintergründe für das Thema „Wüste“ |
+| `wood.png` | Holz-Textur des Brett-Sockels im Spielfeld |
+| `emblem.png` | Emblem hinter dem UBONGO-Titel auf dem Start |
+| `mascot.png` | Maskottchen im Endstand neben der Überschrift |
+| `mascot-ubongo.png` | Maskottchen groß im „UBONGO!“-Overlay beim Lösen |
+| `mascot-sieg.png` | Maskottchen im Endstand bei Sieg |
+| `mascot-trost.png` | Maskottchen im Endstand bei Niederlage + neben dem Lösungs-Hinweis |
+| `sieg-szene.png` | Stimmungs-Hintergrund des Endstands bei Sieg (Hochformat) |
+| `gem-rubin.png`, `gem-saphir.png`, `gem-smaragd.png`, `gem-bernstein.png` | Edelsteine (Schatzleiste, Tabellen, fliegende Steine, Stats) |
+| `avatar-1.png` … `avatar-8.png` | Avatare der Computer-Gegner (statt Emoji) |
+
+Themen und der Teile-Look (Klassisch/Juwelen/Bonbon/Holz) lassen sich im Spiel
+über das 🎨-Menü oben rechts auf dem Startbildschirm umschalten – die Teile-Looks
+sind rein prozedural und funktionieren immer, auch ganz ohne Bilder.

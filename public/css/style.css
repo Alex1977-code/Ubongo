@@ -67,6 +67,13 @@ body {
 }
 .title { margin: 6px 0 0; font-size: 54px; letter-spacing: 4px; color: #ffe8b0;
   text-shadow: 0 3px 0 #8c3a10, 0 6px 14px rgba(0,0,0,.5); font-weight: 900; }
+/* Feiner Gold-Schimmer im Titel (Verlauf in der Schrift, Fallback-Farbe oben) */
+@supports ((background-clip: text) or (-webkit-background-clip: text)) {
+  .title { background: linear-gradient(180deg, #fff6d8 6%, #ffd76e 36%, #f0a132 60%, #ffe9ad 80%, #c47a14 100%);
+    -webkit-background-clip: text; background-clip: text;
+    -webkit-text-fill-color: transparent; color: transparent; text-shadow: none;
+    filter: drop-shadow(0 3px 0 #8c3a10) drop-shadow(0 5px 8px rgba(0,0,0,.45)); }
+}
 .subtitle { margin: 2px 0 0; color: #ffcf8a; font-size: 17px; font-style: italic; }
 .menu { display: flex; flex-direction: column; gap: 13px; margin-top: 6vh; }
 .version { text-align: center; color: rgba(255, 220, 170, .5); font-size: 12px; margin-top: auto; }
@@ -83,6 +90,19 @@ body {
   box-shadow: 0 4px 0 #1e6b42, 0 6px 12px rgba(0,0,0,.3); }
 .btn-secondary:active { box-shadow: 0 1px 0 #1e6b42, 0 2px 6px rgba(0,0,0,.3); }
 .btn-back { width: 46px; min-width: 46px; height: 46px; padding: 0; font-size: 24px; border-radius: 12px; }
+
+/* Sanfter Glanz-Sweep über die Primär-Knöpfe (nur transform, akku-schonend) */
+.btn-primary { position: relative; overflow: hidden; }
+.btn-primary::after { content: ''; position: absolute; top: -30%; bottom: -30%; left: 0; width: 40%;
+  background: linear-gradient(105deg, rgba(255,255,255,0) 0%, rgba(255,255,255,.5) 50%, rgba(255,255,255,0) 100%);
+  transform: translateX(-170%) skewX(-18deg); pointer-events: none; }
+@media (prefers-reduced-motion: no-preference) {
+  .btn-primary::after { animation: sheen 6s linear infinite; }
+}
+@keyframes sheen {
+  0%        { transform: translateX(-170%) skewX(-18deg); }
+  16%, 100% { transform: translateX(430%) skewX(-18deg); }
+}
 
 /* ===== Panels & Formulare ===== */
 .top { display: flex; align-items: center; gap: 12px; padding: 10px 0; }
@@ -194,7 +214,28 @@ body {
 .gem-shelf { display: flex; align-items: center; gap: 8px; margin: 0 12px 6px; padding: 4px 10px;
   background: linear-gradient(180deg, rgba(25, 8, 1, .55), rgba(25, 8, 1, .35));
   border: 1px solid rgba(255, 214, 150, .28); border-radius: 12px; flex-shrink: 0; min-height: 31px;
-  box-shadow: inset 0 2px 6px rgba(0,0,0,.4); }
+  box-shadow: inset 0 2px 6px rgba(0,0,0,.4); position: relative; overflow: hidden; }
+/* Dezentes Glitzern der Schatzleiste */
+.gem-shelf::after { content: ''; position: absolute; top: 0; bottom: 0; left: 0; width: 30%;
+  background: linear-gradient(100deg, rgba(255,240,200,0), rgba(255,240,200,.2), rgba(255,240,200,0));
+  transform: translateX(-160%) skewX(-16deg); pointer-events: none; }
+@media (prefers-reduced-motion: no-preference) {
+  .gem-shelf::after { animation: shelfSheen 7s ease-in-out infinite; }
+}
+@keyframes shelfSheen {
+  0%, 52%   { transform: translateX(-160%) skewX(-16deg); }
+  76%, 100% { transform: translateX(500%) skewX(-16deg); }
+}
+/* Funkel-Sterne der Rohkristalle: pulsieren sanft, versetzte Delays stehen
+   inline am <path class="spark"> – bei reduced-motion statisch */
+@media (prefers-reduced-motion: no-preference) {
+  .gem .spark { animation: gemSpark 2.4s ease-in-out infinite;
+    transform-box: fill-box; transform-origin: center; }
+}
+@keyframes gemSpark {
+  0%, 100% { opacity: .12; transform: scale(.7); }
+  50%      { opacity: .95; transform: scale(1); }
+}
 .shelf-gems { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
 .shelf-total { margin-left: auto; color: #ffd34d; font-weight: 900; font-size: 15px;
   text-shadow: 0 1px 2px rgba(0,0,0,.6); }
@@ -222,3 +263,63 @@ body {
   transform: translateX(-50%); z-index: 15; background: rgba(40, 14, 3, .92); color: #ffd34d;
   font-weight: 800; font-size: 15px; padding: 10px 18px; border-radius: 22px; white-space: nowrap;
   border: 1px solid rgba(255, 211, 77, .5); box-shadow: 0 6px 18px rgba(0,0,0,.5); }
+
+/* ===== Bild-Assets (optional; ohne Bilder greift die prozedurale Grafik) ===== */
+.screen.bg-image { background-size: cover; background-position: center; background-repeat: no-repeat; }
+#screen-start.bg-image .savanna { display: none; }        /* Bild ersetzt die SVG-Szene */
+.gem-img { object-fit: contain; vertical-align: middle; }
+.opp-avatar { width: 18px; height: 18px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
+.title-emblem { position: absolute; left: 50%; bottom: -16px; transform: translateX(-50%);
+  width: min(80%, 300px); z-index: -1; opacity: .9; pointer-events: none; }
+
+/* Maskottchen (nur sichtbar, wenn das jeweilige Bild existiert) */
+.final-head { display: flex; align-items: center; justify-content: center; gap: 10px; }
+.mascot-img { width: 90px; height: 90px; object-fit: contain; }
+.overlay-shout { flex-direction: column; gap: 6px; }
+.mascot-shout { width: min(46vw, 210px); max-height: 34vh; object-fit: contain;
+  filter: drop-shadow(0 8px 20px rgba(0,0,0,.5)); }
+.mascot-note { width: 34px; height: 34px; object-fit: contain; vertical-align: middle;
+  margin: -6px 8px -6px 0; }
+@media (prefers-reduced-motion: no-preference) {
+  .overlay:not(.hidden) .mascot-img, .overlay:not(.hidden) .mascot-shout {
+    animation: mascotPop .5s cubic-bezier(.3, 1.6, .5, 1); }
+}
+@keyframes mascotPop { 0% { transform: scale(.3); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
+
+/* Sieger-Szene als Hintergrund des Endstands (Bild + dunkle Überlagerung) */
+.result-card.scene { background-size: cover; background-position: center top; color: #ffe8b0; }
+.result-card.scene h3 { color: #ffd34d; }
+.result-card.scene .result-table td, .result-card.scene .result-table th {
+  border-bottom-color: rgba(255, 232, 176, .28); }
+.result-card.scene #final-note { color: #9fe8bf; }
+
+/* ===== Design-Menü (🎨: Thema + Teile-Look) ===== */
+.btn-design { position: absolute; top: calc(12px + env(safe-area-inset-top)); right: 12px; z-index: 2; }
+.design-card { text-align: left; }
+.design-card h3 { text-align: center; }
+.design-card .chip { min-width: 84px; }
+
+/* Themen-Farbwelten (CSS-Fallback ohne Hintergrund-Bilder) */
+body.theme-dschungel {
+  background: #06231d;
+  background-image:
+    radial-gradient(rgba(120, 255, 190, .10) 2px, transparent 2.5px),
+    radial-gradient(rgba(0, 0, 0, .22) 2px, transparent 2.5px),
+    linear-gradient(160deg, #0f4032 0%, #082e27 45%, #041c1e 100%);
+  background-size: 34px 34px, 34px 34px, 100% 100%;
+  background-position: 0 0, 17px 17px, 0 0;
+}
+body.theme-wueste {
+  background: #b97f2e;
+  background-image:
+    radial-gradient(rgba(255, 236, 180, .18) 2px, transparent 2.5px),
+    radial-gradient(rgba(110, 62, 8, .18) 2px, transparent 2.5px),
+    linear-gradient(160deg, #e2ab4c 0%, #c78a31 45%, #995f1a 100%);
+  background-size: 34px 34px, 34px 34px, 100% 100%;
+  background-position: 0 0, 17px 17px, 0 0;
+}
+/* Savannen-SVG nur beim Thema Savanne; im Nacht-Dschungel bleiben die
+   Glühwürmchen (grünlich), in der Wüste entfallen sie */
+body.theme-dschungel .savanna-svg, body.theme-wueste .savanna-svg { display: none; }
+body.theme-wueste .savanna .fly { display: none; }
+body.theme-dschungel .fly { background: #baffdb; box-shadow: 0 0 9px 3px rgba(140, 255, 195, .7); }
