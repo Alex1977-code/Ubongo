@@ -80,7 +80,7 @@ const lobbyRounds = chipGroup('lobby-rounds', () => sendConfig());
 
 // ---------- Design: Thema + Teile-Look (🎨-Menü auf dem Start) ----------
 const getTheme = () => { try { return localStorage.getItem('ubongo.theme') || 'savanne'; } catch { return 'savanne'; } };
-const getSkin = () => { try { return localStorage.getItem('ubongo.skin') || 'klassisch'; } catch { return 'klassisch'; } };
+const getSkin = () => { try { return localStorage.getItem('ubongo.skin') || 'kristall'; } catch { return 'kristall'; } };
 
 function applyDesign() {
   const t = getTheme();
