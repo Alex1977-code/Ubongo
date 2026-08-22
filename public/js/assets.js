@@ -22,7 +22,9 @@ let loading = null;
 
 async function loadOne(name) {
   try {
-    const res = await fetch('img/' + name + '.png');
+    // WebP bevorzugt (deutlich kleiner), PNG als Fallback
+    let res = await fetch('img/' + name + '.webp');
+    if (!res.ok) res = await fetch('img/' + name + '.png');
     if (!res.ok) return;                       // Datei gibt es (noch) nicht
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);
