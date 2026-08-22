@@ -27,7 +27,7 @@ die App erkennt die Bilder am Namen. Ablage: `public/img/` im Repository
 | bg-menu-wueste / bg-game-wueste.png | Hintergründe Wüste |
 | wood.png | Holz-Textur Spielbrett |
 | emblem.png | Schmuckrahmen hinter dem Titel |
-| mascot / mascot-ubongo / mascot-sieg / mascot-trost.png | Löwen-Maskottchen |
+| mascot / mascot-ubongo / mascot-sieg / mascot-trost.png | Löwen-Spielfigur |
 | sieg-szene.png | Schatzhöhle im Sieg-Endstand |
 | app-icon.png | App-Icon |
 | avatar-1.png … avatar-8.png | die 8 Tier-Gegner |
