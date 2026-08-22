@@ -4,6 +4,7 @@ import { Game } from './game.js';
 import { Net } from './net.js';
 import { localScores, onlineScores, getName, setName, getServer, setServer, getStats } from './highscore.js';
 import { gemRow, GEMS, useGemAssets } from './gems.js';
+import { DEFAULT_SERVER } from './config.js';
 import { loadAssets, assetURL } from './assets.js';
 import { setPieceSkin } from './board.js';
 import { unlock, isMuted, toggleMuted, isMusicOn, toggleMusic } from './sound.js';
@@ -141,9 +142,14 @@ for (const id of ['solo-name', 'online-name']) {
 }
 
 // Spiel-Server-Adresse (für Spiele übers Internet) vorbelegen und merken
+// Spiel-Server: Standard-Server ist fest hinterlegt. Kommt die Seite direkt
+// vom Ubongo-Server (WLAN/localhost), gilt die eigene Herkunft; das Feld
+// kann beides überschreiben.
+const servedByGameServer = !location.hostname.endsWith('github.io') && location.protocol !== 'file:';
 $('online-server').value = getServer();
+if (DEFAULT_SERVER) $('online-server').placeholder = `Standard: ${DEFAULT_SERVER}`;
 $('online-server').addEventListener('input', () => setServer($('online-server').value.trim()));
-const serverBase = () => $('online-server').value.trim();
+const serverBase = () => $('online-server').value.trim() || (servedByGameServer ? '' : DEFAULT_SERVER);
 
 // ---------- Spiel-Lebenszyklus ----------
 let game = null;
@@ -153,6 +159,9 @@ let sessionToken = null;   // für automatisches Wiederverbinden
 let reconnecting = false;
 
 function endGame(backTo = 'start') {
+  knocks = [];
+  const admitBox = $('admit-box');
+  if (admitBox) admitBox.classList.add('hidden');
   if (game) { game.destroy(); game = null; }
   if (net) { net.close(); net = null; }
   sessionToken = null;
@@ -248,6 +257,9 @@ async function connect() {
   if (net && net.connected) return net;
   net = new Net();
   net.on('you', (msg) => { if (msg.token) sessionToken = msg.token; })
+     .on('pending', () => { $('online-status').textContent = '🚪 Angeklopft – der Gastgeber lässt dich gleich rein …'; })
+     .on('knock', (msg) => { knocks.push(msg); renderKnock(); })
+     .on('knockgone', (msg) => { knocks = knocks.filter(k => k.reqId !== msg.reqId); renderKnock(); })
      .on('room', (msg) => renderLobby(msg))
      .on('error', (msg) => {
        $('online-status').textContent = msg.msg;
@@ -372,6 +384,22 @@ document.addEventListener('visibilitychange', () => {
   if (!document.hidden && sessionToken && (!net || !net.connected)) handleDisconnect();
 });
 
+// Einlass-Anfragen (nur der Gastgeber sieht sie, nacheinander)
+let knocks = [];
+function renderKnock() {
+  const box = $('admit-box');
+  if (knocks.length === 0) { box.classList.add('hidden'); return; }
+  $('admit-name').textContent = knocks[0].name;
+  box.classList.remove('hidden');
+}
+function answerKnock(ok) {
+  const k = knocks.shift();
+  if (k && net) net.send({ t: 'admit', reqId: k.reqId, ok });
+  renderKnock();
+}
+$('admit-yes').addEventListener('click', () => answerKnock(true));
+$('admit-no').addEventListener('click', () => answerKnock(false));
+
 $('lobby-start').addEventListener('click', () => net && net.send({ t: 'start' }));
 $('lobby-leave').addEventListener('click', () => {
   if (net) net.send({ t: 'leave' });
@@ -394,7 +422,7 @@ async function renderScores(which) {
   if (which === 'local') list = localScores();
   else {
     table.innerHTML = '<tr><td>Lade …</td></tr>';
-    try { list = await onlineScores(getServer()); }
+    try { list = await onlineScores(serverBase()); }
     catch {
       table.innerHTML = '';
       empty.classList.remove('hidden');
