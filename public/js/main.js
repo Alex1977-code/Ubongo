@@ -5,7 +5,7 @@ import { Net } from './net.js';
 import { localScores, onlineScores, getName, setName, getServer, setServer, getStats } from './highscore.js';
 import { gemRow, GEMS, useGemAssets } from './gems.js';
 import { DEFAULT_SERVER } from './config.js';
-import { loadAssets, assetURL } from './assets.js';
+import { loadAssets, assetURL, avatarNum } from './assets.js';
 import { setPieceSkin } from './board.js';
 import { unlock, isMuted, toggleMuted, isMusicOn, toggleMusic } from './sound.js';
 
@@ -322,10 +322,13 @@ function renderLobby(msg) {
   $('lobby-code').textContent = msg.code;
   const me = msg.players.find(p => p.id === net.myId);
   isHost = !!(me && me.host);
-  $('lobby-players').innerHTML = msg.players.map(p =>
-    `<li class="${p.online === false ? 'offline' : ''}">${p.host ? '👑' : '🙂'} ${esc(p.name)}` +
-    `${p.id === net.myId ? ' (du)' : ''}${p.online === false ? ' 📴' : ''}` +
-    `${p.host ? '<span class="badge">Gastgeber</span>' : ''}</li>`).join('');
+  $('lobby-players').innerHTML = msg.players.map(p => {
+    const avSrc = assetURL('avatar-' + avatarNum(p.name));
+    const av = avSrc ? `<img class="lobby-avatar" src="${avSrc}" alt="">` : '🙂';
+    return `<li class="${p.online === false ? 'offline' : ''}">${av}${p.host ? ' 👑' : ''} ${esc(p.name)}` +
+      `${p.id === net.myId ? ' (du)' : ''}${p.online === false ? ' 📴' : ''}` +
+      `${p.host ? '<span class="badge">Gastgeber</span>' : ''}</li>`;
+  }).join('');
   $('lobby-host-controls').classList.toggle('hidden', !isHost);
   $('lobby-wait').classList.toggle('hidden', isHost);
   // Start erst ab 2 Spielern - vorher klar machen, worauf gewartet wird

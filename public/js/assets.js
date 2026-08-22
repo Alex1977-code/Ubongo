@@ -10,7 +10,9 @@ const FILES = [
   'bg-menu-dschungel', 'bg-game-dschungel',           // Thema: Dschungel bei Nacht
   'bg-menu-wueste', 'bg-game-wueste',                 // Thema: Wüste
   'mascot-ubongo', 'mascot-sieg', 'mascot-trost',     // Maskottchen-Reaktionen
+  'mascot-jubel',                                     // Freudensprung mit Kristall (Sieg-Held)
   'sieg-szene',                                       // Hintergrund des Endstands bei Sieg
+  'feuerwerk',                                        // Schwarz-Grund, wird per Screen-Blend gezeigt
   'gem-rubin', 'gem-saphir', 'gem-smaragd', 'gem-bernstein',
   'avatar-1', 'avatar-2', 'avatar-3', 'avatar-4',
   'avatar-5', 'avatar-6', 'avatar-7', 'avatar-8',
@@ -44,3 +46,10 @@ export function loadAssets() {
 export const asset = (name) => imgs.get(name) || null;      // Image | null
 export const assetURL = (name) => urls.get(name) || null;   // URL | null
 export const hasAsset = (name) => imgs.has(name);
+
+// Stabiler Avatar (1–8) aus dem Namen: gleicher Name → gleiches Bild auf allen Geräten.
+export function avatarNum(name) {
+  let h = 0;
+  for (const ch of String(name || '')) h = (h * 31 + ch.codePointAt(0)) >>> 0;
+  return 1 + h % 8;
+}
