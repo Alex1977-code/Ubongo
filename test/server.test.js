@@ -31,8 +31,12 @@ try {
   assert(/^[A-Z2-9]{4}$/.test(roomA.code), 'Raumcode-Format: ' + roomA.code);
 
   b.send(JSON.stringify({ t: 'join', code: roomA.code, name: 'Ben' }));
+  await waitFor('b', 'pending');
+  const knock = await waitFor('a', 'knock');
+  assert(knock.name === 'Ben', 'Gastgeberin sieht Einlass-Anfrage von Ben');
+  a.send(JSON.stringify({ t: 'admit', reqId: knock.reqId, ok: true }));
   const roomB = await waitFor('b', 'room');
-  assert(roomB.players.length === 2, 'Lobby hat 2 Spieler');
+  assert(roomB.players.length === 2, 'Lobby hat 2 Spieler (nach Einlass)');
 
   a.send(JSON.stringify({ t: 'start' }));
   const [ra, rb] = await Promise.all([waitFor('a', 'round'), waitFor('b', 'round')]);
@@ -65,6 +69,9 @@ try {
   c.send(JSON.stringify({ t: 'create', name: 'Carl', difficulty: 'leicht', rounds: 1 }));
   const room2 = await waitFor('c', 'room');
   d.send(JSON.stringify({ t: 'join', code: room2.code, name: 'Dora' }));
+  await waitFor('d', 'pending');
+  const knock2 = await waitFor('c', 'knock');
+  c.send(JSON.stringify({ t: 'admit', reqId: knock2.reqId, ok: true }));
   await waitFor('d', 'room');
   inbox.c = inbox.c.filter(m => m.t !== 'room');
   c.send(JSON.stringify({ t: 'config', timeFactor: 0.7 }));

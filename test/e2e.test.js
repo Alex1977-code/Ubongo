@@ -211,6 +211,9 @@ try {
   await B.fill('#online-name', 'Mia');
   await B.fill('#online-code', code);
   await B.click('#online-join');
+  await A.waitForSelector('#admit-box:not(.hidden)', { timeout: 8000 });
+  assert(true, 'Gastgeber sieht Einlass-Anfrage');
+  await A.click('#admit-yes');
   await B.waitForSelector('#screen-lobby.active');
   await A.waitForFunction(() => document.querySelectorAll('#lobby-players li').length === 2);
   assert(true, 'Beide Spieler in der Lobby');

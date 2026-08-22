@@ -249,9 +249,8 @@
 
       <label class="field-label" for="online-server">Spiel-Server (optional)</label>
       <input id="online-server" class="input" placeholder="z. B. ubongo-server.onrender.com" autocapitalize="off" autocomplete="off">
-      <p class="hint">Leer lassen, wenn die Seite direkt vom Ubongo-Server kommt (WLAN).<br>
-        Für Spiele übers Internet die Adresse eines gehosteten Servers eintragen –<br>
-        alle Mitspieler nutzen dieselbe Adresse. Einrichtung: siehe Anleitung.</p>
+      <p class="hint">Der Standard-Server ist fest hinterlegt – einfach leer lassen.<br>
+        Nur ausfüllen, wenn ihr einen eigenen Server nutzt (alle dieselbe Adresse).</p>
     </div>
   </section>
 
@@ -259,6 +258,13 @@
   <section id="screen-lobby" class="screen">
     <header class="top"><button class="btn btn-back" id="lobby-leave">‹</button><h2>Spielraum</h2></header>
     <div class="panel">
+      <div id="admit-box" class="admit-box hidden">
+        <p>🙋 <b id="admit-name"></b> möchte mitspielen</p>
+        <div class="admit-btns">
+          <button class="btn btn-primary" id="admit-yes">✅ Reinlassen</button>
+          <button class="btn" id="admit-no">❌ Ablehnen</button>
+        </div>
+      </div>
       <p class="field-label center">Raumcode – Freunde geben ihn ein:</p>
       <div class="room-code" id="lobby-code">····</div>
       <ul class="player-list" id="lobby-players"></ul>
