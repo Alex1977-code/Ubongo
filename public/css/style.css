@@ -326,3 +326,13 @@ body.theme-wueste {
 body.theme-dschungel .savanna-svg, body.theme-wueste .savanna-svg { display: none; }
 body.theme-wueste .savanna .fly { display: none; }
 body.theme-dschungel .fly { background: #baffdb; box-shadow: 0 0 9px 3px rgba(140, 255, 195, .7); }
+
+/* ===== Einlass-Anfrage (Gastgeber) ===== */
+.admit-box { background: #fffdf7; border: 2.5px solid #f5a623; border-radius: 14px;
+  padding: 12px 14px; margin-bottom: 14px; box-shadow: 0 0 0 4px rgba(245, 166, 35, .18);
+  animation: admitPulse 1.6s infinite; }
+.admit-box p { margin: 0 0 10px; font-size: 16px; }
+.admit-btns { display: flex; gap: 10px; }
+.admit-btns .btn { flex: 1; font-size: 15px; padding: 10px 8px; }
+@keyframes admitPulse { 50% { box-shadow: 0 0 0 7px rgba(245, 166, 35, .08); } }
+@media (prefers-reduced-motion: reduce) { .admit-box { animation: none; } }

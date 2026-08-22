@@ -137,7 +137,10 @@ function removePlayer(room, player) {
     rooms.delete(room.code);
     return;
   }
-  if (!room.players.some(p => p.id === room.hostId)) room.hostId = room.players[0].id;
+  if (!room.players.some(p => p.id === room.hostId)) {
+    room.hostId = room.players[0].id;
+    sendKnocks(room);
+  }
   broadcast(room, lobbyState(room));
   if (room.state === 'playing' && room.players.every(p => p.done)) finishRound(room);
 }
@@ -183,6 +186,24 @@ setInterval(() => {
   }
 }, 20000).unref();
 
+// ---------- Einlass-Kontrolle: Der Gastgeber lässt Mitspieler herein ----------
+let nextReqId = 1;
+
+function hostOf(room) { return room.players.find(p => p.id === room.hostId); }
+
+function sendKnocks(room) { // dem (ggf. neuen) Gastgeber alle offenen Anfragen zeigen
+  const host = hostOf(room);
+  if (!host) return;
+  for (const req of room.pending || []) send(host.ws, { t: 'knock', reqId: req.id, name: req.name });
+}
+
+function removeKnock(room, req, notifyHost) {
+  const idx = (room.pending || []).indexOf(req);
+  if (idx >= 0) room.pending.splice(idx, 1);
+  clearTimeout(req.timer);
+  if (notifyHost) { const host = hostOf(room); if (host) send(host.ws, { t: 'knockgone', reqId: req.id }); }
+}
+
 function rejoin(ws, token) {
   for (const room of rooms.values()) {
     const p = room.players.find(q => q.token === token);
@@ -203,6 +224,7 @@ function rejoin(ws, token) {
       send(ws, room.finalMsg);
     }
     broadcast(room, lobbyState(room));
+    if (p.id === room.hostId) sendKnocks(room);
     return;
   }
   send(ws, { t: 'error', msg: 'Sitzung abgelaufen – bitte neu beitreten.', fatal: true });
@@ -236,12 +258,42 @@ wss.on('connection', (ws) => {
         if (!r) { send(ws, { t: 'error', msg: 'Raum nicht gefunden.' }); return; }
         if (r.state !== 'lobby') { send(ws, { t: 'error', msg: 'Das Spiel läuft bereits.' }); return; }
         if (r.players.length >= 8) { send(ws, { t: 'error', msg: 'Der Raum ist voll (max. 8).' }); return; }
-        const player = { id: nextPlayerId++, ws, name: clean(msg.name) || 'Spieler', total: 0, gems: [],
+        // Erst anklopfen: Der Gastgeber entscheidet, wer hereinkommt.
+        r.pending = r.pending || [];
+        const req = { id: nextReqId++, ws, name: clean(msg.name) || 'Spieler' };
+        req.timer = setTimeout(() => { // niemand reagiert: höflich abweisen
+          removeKnock(r, req, true);
+          send(req.ws, { t: 'error', msg: 'Keine Antwort vom Gastgeber – bitte später nochmal.', fatal: true });
+        }, 90000);
+        r.pending.push(req);
+        ws.knockRoom = r;
+        send(ws, { t: 'pending' });
+        const host = hostOf(r);
+        if (host) send(host.ws, { t: 'knock', reqId: req.id, name: req.name });
+        break;
+      }
+      case 'admit': { // Gastgeber lässt herein oder lehnt ab
+        if (!room || room.state !== 'lobby') return;
+        const me = room.players.find(p => p.ws === ws);
+        if (!me || me.id !== room.hostId) return;
+        const req = (room.pending || []).find(q => q.id === (msg.reqId | 0));
+        if (!req) return;
+        removeKnock(room, req, false);
+        if (!msg.ok) {
+          send(req.ws, { t: 'error', msg: 'Der Gastgeber hat dich nicht hereingelassen.', fatal: true });
+          return;
+        }
+        if (room.players.length >= 8) {
+          send(req.ws, { t: 'error', msg: 'Der Raum ist inzwischen voll (max. 8).', fatal: true });
+          return;
+        }
+        const player = { id: nextPlayerId++, ws: req.ws, name: req.name, total: 0, gems: [],
                          done: false, ms: null, token: crypto.randomBytes(12).toString('hex'), connected: true };
-        r.players.push(player);
-        ws.room = r;
-        send(ws, { t: 'you', id: player.id, token: player.token });
-        broadcast(r, lobbyState(r));
+        room.players.push(player);
+        req.ws.knockRoom = null;
+        req.ws.room = room;
+        send(req.ws, { t: 'you', id: player.id, token: player.token });
+        broadcast(room, lobbyState(room));
         break;
       }
       case 'config': { // Host ändert Einstellungen in der Lobby
@@ -297,7 +349,15 @@ wss.on('connection', (ws) => {
       case 'leave': leaveRoom(ws); break;
     }
   });
-  ws.on('close', () => markDisconnected(ws));
+  ws.on('close', () => {
+    if (ws.knockRoom) {
+      const r = ws.knockRoom;
+      const req = (r.pending || []).find(q => q.ws === ws);
+      if (req) removeKnock(r, req, true);
+      ws.knockRoom = null;
+    }
+    markDisconnected(ws);
+  });
 });
 
 server.listen(PORT, () => {
