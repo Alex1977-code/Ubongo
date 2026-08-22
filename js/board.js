@@ -21,9 +21,9 @@ function mix(hexA, hexB, f) { // zwei Farben mischen (f = Anteil von B)
 
 // Teile-Look (Design-Menü): klassisch | juwelen | bonbon | holz –
 // rein prozedural gezeichnet, wirkt ab der nächsten Zeichnung.
-const SKINS = ['klassisch', 'juwelen', 'bonbon', 'holz'];
-let PIECE_SKIN = 'klassisch';
-export function setPieceSkin(s) { PIECE_SKIN = SKINS.includes(s) ? s : 'klassisch'; }
+const SKINS = ['kristall', 'klassisch', 'juwelen', 'bonbon', 'holz'];
+let PIECE_SKIN = 'kristall';
+export function setPieceSkin(s) { PIECE_SKIN = SKINS.includes(s) ? s : 'kristall'; }
 
 export class BoardView {
   constructor(canvas, card, { onSolved, onPlace } = {}) {
@@ -397,14 +397,17 @@ export class BoardView {
       const ox = this.bx + p.placed.gx * c, oy = this.by + p.placed.gy * c;
       const sel = p.id === this.selectedId && !this.locked;
       if (p.settle != null) {
-        const t = (performance.now() - p.settle) / 240;
-        if (t >= 1) { p.settle = null; this._drawPiece(p, ox, oy, c, sel); continue; }
+        const el = performance.now() - p.settle;
+        if (el >= 560) { p.settle = null; this._drawPiece(p, ox, oy, c, sel); continue; }
+        const t = Math.min(1, el / 240);
         const k = 1 + 0.12 * (1 - t) * Math.cos(t * Math.PI * 2.2); // gedämpftes Einschwingen
         const b = bounds(this.cells(p));
         const cx = ox + b.w * c / 2, cy = oy + b.h * c / 2;
         ctx.save();
         ctx.translate(cx, cy); ctx.scale(k, k); ctx.translate(-cx, -cy);
         this._drawPiece(p, ox, oy, c, sel);
+        // Licht-Sweep: ein Glanzband läuft einmal schräg über das Teil
+        if (!this.reduceMotion) this._sweep(p, ox, oy, c, el / 560);
         ctx.restore();
       } else {
         this._drawPiece(p, ox, oy, c, sel);
@@ -527,6 +530,22 @@ export class BoardView {
     ctx.restore();
   }
 
+  // Vierstrahliger Funkel-Stern
+  _star(ctx, x, y, r, a) {
+    ctx.save();
+    ctx.globalAlpha = a;
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    for (let i = 0; i < 8; i++) {
+      const ang = i * Math.PI / 4 + Math.PI / 8;
+      const rr = i % 2 ? r * 0.32 : r;
+      ctx.lineTo(x + Math.cos(ang) * rr, y + Math.sin(ang) * rr);
+    }
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
+
   _drawPiece(p, ox, oy, c, selected) {
     const ctx = this.ctx;
     const cells = this.cells(p);
@@ -535,7 +554,31 @@ export class BoardView {
     const skin = PIECE_SKIN;
     // Holz-Look: Teil-Farbe gedeckt ins Bräunliche gemischt (bleibt unterscheidbar)
     const col = skin === 'holz' ? mix(p.color, '#8a5a2b', 0.55) : p.color;
-    const rad = skin === 'bonbon' ? 0.3 : skin === 'juwelen' ? 0.14 : 0.18;
+    const rad = skin === 'bonbon' ? 0.3 : skin === 'juwelen' ? 0.14 : skin === 'kristall' ? 0.16 : 0.18;
+    const pb = bounds(cells);
+
+    // Weicher Schlagschatten unter dem Teil: Die Füllung liegt weit außerhalb
+    // des Canvas, nur ihr versetzter Schatten wird sichtbar - so bleibt das
+    // (halbtransparente) Teil selbst unangetastet.
+    ctx.save();
+    ctx.shadowColor = 'rgba(0, 0, 0, .36)';
+    ctx.shadowBlur = c * 0.2;
+    ctx.shadowOffsetX = 0;
+    ctx.shadowOffsetY = 2000 + c * 0.11;
+    ctx.fillStyle = '#000';
+    ctx.beginPath();
+    for (const [x, y] of cells) ctx.rect(ox + x * c + g, oy + y * c + g - 2000, c - 2 * g, c - 2 * g);
+    ctx.fill();
+    ctx.restore();
+
+    // Kristall: ein diagonaler Verlauf über das ganze Teil
+    let kristallGrad = null;
+    if (skin === 'kristall') {
+      kristallGrad = ctx.createLinearGradient(ox, oy, ox + pb.w * c, oy + pb.h * c);
+      kristallGrad.addColorStop(0, shade(col, 0.5));
+      kristallGrad.addColorStop(0.5, col);
+      kristallGrad.addColorStop(1, shade(col, -0.32));
+    }
 
     for (const [x, y] of cells) {
       const px = ox + x * c, py = oy + y * c;
@@ -558,13 +601,14 @@ export class BoardView {
         grad.addColorStop(0, shade(col, 0.22));
         grad.addColorStop(1, shade(col, -0.12));
       }
-      ctx.fillStyle = grad;
+      ctx.fillStyle = skin === 'kristall' ? kristallGrad : grad;
       const x0 = px + (w ? 0 : g), y0 = py + (n ? 0 : g);
       const x1 = px + c - (e ? 0 : g), y1 = py + c - (s ? 0 : g);
       if (skin === 'juwelen') ctx.globalAlpha = 0.84; // leicht durchscheinender Kristall
+      if (skin === 'kristall') ctx.globalAlpha = 0.74; // Glas: Untergrund schimmert durch
       this._rrEdges(ctx, x0, y0, x1 - x0, y1 - y0, c * rad, !n && !w, !n && !e, !s && !e, !s && !w);
       ctx.fill();
-      if (skin === 'juwelen') ctx.globalAlpha = 1;
+      if (skin === 'juwelen' || skin === 'kristall') ctx.globalAlpha = 1;
 
       // Kanten-Licht je Teile-Look
       if (skin === 'bonbon') {
@@ -599,7 +643,7 @@ export class BoardView {
         if (!s) { ctx.fillStyle = 'rgba(0,0,0,.2)'; ctx.fillRect(x0 + c * .12, y1 - g - c * .09, (x1 - x0) - c * .24, c * .09); }
       }
       // Innere Rasterlinien (Einheitsquadrate sichtbar machen)
-      ctx.strokeStyle = 'rgba(0,0,0,.13)';
+      ctx.strokeStyle = skin === 'kristall' ? 'rgba(255,255,255,.12)' : 'rgba(0,0,0,.13)';
       ctx.lineWidth = 1;
       if (e) { ctx.beginPath(); ctx.moveTo(px + c, py + 2); ctx.lineTo(px + c, py + c - 2); ctx.stroke(); }
       if (s) { ctx.beginPath(); ctx.moveTo(px + 2, py + c); ctx.lineTo(px + c - 2, py + c); ctx.stroke(); }
@@ -631,20 +675,96 @@ export class BoardView {
       ctx.beginPath(); ctx.arc(fx, fy, c * 0.045, 0, Math.PI * 2); ctx.fill();
       ctx.restore();
     }
-    // Umriss
-    ctx.strokeStyle = selected ? '#fff' : 'rgba(30,10,0,.45)';
-    ctx.lineWidth = selected ? 2.5 : 1.5;
-    for (const [x, y] of cells) {
-      const px = ox + x * c, py = oy + y * c;
-      const n = has.has(K(x, y - 1)), s = has.has(K(x, y + 1)),
-            w = has.has(K(x - 1, y)), e = has.has(K(x + 1, y));
+    if (skin === 'kristall') {
+      ctx.save();
       ctx.beginPath();
-      if (!n) { ctx.moveTo(px + (w ? 0 : g), py + g); ctx.lineTo(px + c - (e ? 0 : g), py + g); }
-      if (!s) { ctx.moveTo(px + (w ? 0 : g), py + c - g); ctx.lineTo(px + c - (e ? 0 : g), py + c - g); }
-      if (!w) { ctx.moveTo(px + g, py + (n ? 0 : g)); ctx.lineTo(px + g, py + c - (s ? 0 : g)); }
-      if (!e) { ctx.moveTo(px + c - g, py + (n ? 0 : g)); ctx.lineTo(px + c - g, py + c - (s ? 0 : g)); }
+      for (const [x, y] of cells) ctx.rect(ox + x * c + g, oy + y * c + g, c - 2 * g, c - 2 * g);
+      ctx.clip();
+      // Heller Lichtkern
+      const cxp = ox + pb.w * c * 0.38, cyp = oy + pb.h * c * 0.32;
+      const core = ctx.createRadialGradient(cxp, cyp, 0, cxp, cyp, Math.max(pb.w, pb.h) * c * 0.7);
+      core.addColorStop(0, 'rgba(255,255,255,.36)');
+      core.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = core;
+      ctx.fillRect(ox, oy, pb.w * c, pb.h * c);
+      // Diagonale Facetten-Streifen
+      ctx.strokeStyle = 'rgba(255,255,255,.15)';
+      ctx.lineWidth = c * 0.11;
+      ctx.beginPath();
+      for (let i = -pb.h; i < pb.w; i++) {
+        ctx.moveTo(ox + i * c + c * 0.25, oy + pb.h * c);
+        ctx.lineTo(ox + (i + pb.h) * c + c * 0.55, oy);
+      }
       ctx.stroke();
+      // Zwei ruhige Funkelsterne
+      const [c0x, c0y] = cells[0];
+      const [clx, cly] = cells[cells.length - 1];
+      this._star(ctx, ox + c0x * c + c * 0.76, oy + c0y * c + c * 0.28, c * 0.11, 0.55);
+      this._star(ctx, ox + clx * c + c * 0.3, oy + cly * c + c * 0.72, c * 0.07, 0.4);
+      // Gelegentliches Aufblitzen auf wechselnden Zellen
+      if (!this.reduceMotion) {
+        const t = performance.now();
+        const cyc = 3400, off = p.i * 911;
+        const ph = ((t + off) % cyc) / cyc;
+        if (ph < 0.22) {
+          const a = Math.sin((ph / 0.22) * Math.PI);
+          const ci = Math.floor((t + off) / cyc) % cells.length;
+          const [tx, ty] = cells[ci];
+          this._star(ctx, ox + tx * c + c * 0.62, oy + ty * c + c * 0.38, c * 0.17, a * 0.9);
+        }
+      }
+      ctx.restore();
     }
+
+    // Umriss (bei Auswahl: goldene Leuchtkante statt weißem Rahmen)
+    const outline = () => {
+      ctx.beginPath();
+      for (const [x, y] of cells) {
+        const px = ox + x * c, py = oy + y * c;
+        const n = has.has(K(x, y - 1)), s = has.has(K(x, y + 1)),
+              w = has.has(K(x - 1, y)), e = has.has(K(x + 1, y));
+        if (!n) { ctx.moveTo(px + (w ? 0 : g), py + g); ctx.lineTo(px + c - (e ? 0 : g), py + g); }
+        if (!s) { ctx.moveTo(px + (w ? 0 : g), py + c - g); ctx.lineTo(px + c - (e ? 0 : g), py + c - g); }
+        if (!w) { ctx.moveTo(px + g, py + (n ? 0 : g)); ctx.lineTo(px + g, py + c - (s ? 0 : g)); }
+        if (!e) { ctx.moveTo(px + c - g, py + (n ? 0 : g)); ctx.lineTo(px + c - g, py + c - (s ? 0 : g)); }
+      }
+      ctx.stroke();
+    };
+    if (selected) {
+      ctx.save();
+      const pulse = this.reduceMotion ? 0 : Math.sin(performance.now() / 280) * 3;
+      ctx.shadowColor = 'rgba(255, 212, 110, .95)';
+      ctx.shadowBlur = 10 + pulse;
+      ctx.strokeStyle = 'rgba(255, 240, 190, .95)';
+      ctx.lineWidth = 2.5;
+      outline();
+      outline(); // zweiter Strich verstärkt das Leuchten
+      ctx.restore();
+    } else {
+      ctx.strokeStyle = skin === 'kristall' ? 'rgba(255,255,255,.5)' : 'rgba(30,10,0,.45)';
+      ctx.lineWidth = 1.5;
+      outline();
+    }
+  }
+
+  // Glanzband für den Einrast-Moment (q: 0..1)
+  _sweep(p, ox, oy, c, q) {
+    const ctx = this.ctx;
+    const cells = this.cells(p);
+    const b = bounds(cells);
+    const w = b.w * c, h = b.h * c;
+    ctx.save();
+    ctx.beginPath();
+    for (const [x, y] of cells) ctx.rect(ox + x * c, oy + y * c, c, c);
+    ctx.clip();
+    const x = ox - h - c + q * (w + h + 2 * c);
+    const grad = ctx.createLinearGradient(x, oy + h, x + h + c, oy);
+    grad.addColorStop(0, 'rgba(255,255,255,0)');
+    grad.addColorStop(0.5, 'rgba(255,255,255,.5)');
+    grad.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(ox, oy, w, h);
+    ctx.restore();
   }
 
   _rr(ctx, x, y, w, h, r) {
