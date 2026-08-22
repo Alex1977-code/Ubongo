@@ -276,18 +276,44 @@ body {
   width: min(80%, 300px); z-index: -1; opacity: .9; pointer-events: none; }
 
 /* Maskottchen (nur sichtbar, wenn das jeweilige Bild existiert) */
-.final-head { display: flex; align-items: center; justify-content: center; gap: 10px; }
-.mascot-img { width: 90px; height: 90px; object-fit: contain; }
+.final-head { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; }
+.mascot-img { width: 160px; height: 160px; object-fit: contain; display: block; margin: 0 auto;
+  filter: drop-shadow(0 10px 16px rgba(0, 0, 0, .5));
+  background: radial-gradient(circle at 50% 58%, rgba(255, 214, 110, .5), rgba(255, 214, 110, 0) 70%); }
+
+/* Sieger-Bühne: Maskottchen über der Karte, mit Strahlenkranz und Wippen */
+.overlay-final { flex-direction: column; }
+/* Titel rutscht unter die Füße des Maskottchens (ragt -56px in die Karte) */
+.overlay-final .result-card { padding-top: 60px; }
+.final-hero { position: relative; z-index: 2; margin-bottom: -56px; pointer-events: none; }
+.final-hero.won { animation: heroBob 2.4s ease-in-out .8s infinite; }
+.final-hero.won::before { content: ''; position: absolute; inset: -75px; border-radius: 50%; z-index: -1;
+  background: repeating-conic-gradient(rgba(255, 214, 110, .32) 0 11deg, rgba(255, 214, 110, 0) 11deg 22deg);
+  -webkit-mask-image: radial-gradient(circle, #000 22%, transparent 68%);
+  mask-image: radial-gradient(circle, #000 22%, transparent 68%);
+  animation: raysSpin 14s linear infinite; }
+@keyframes raysSpin { to { transform: rotate(360deg); } }
+@keyframes heroBob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-9px); } }
+@media (prefers-reduced-motion: reduce) {
+  .final-hero.won, .final-hero.won::before { animation: none; }
+}
 .overlay-shout { flex-direction: column; gap: 6px; }
-.mascot-shout { width: min(46vw, 210px); max-height: 34vh; object-fit: contain;
+.overlay-shout { flex-direction: column; gap: 4px; }
+.mascot-shout { width: min(64vw, 300px); max-height: 42vh; object-fit: contain;
+  filter: drop-shadow(0 14px 22px rgba(0, 0, 0, .55));
   filter: drop-shadow(0 8px 20px rgba(0,0,0,.5)); }
-.mascot-note { width: 34px; height: 34px; object-fit: contain; vertical-align: middle;
+.mascot-note { width: 64px; height: 64px; object-fit: contain; vertical-align: middle;
+  filter: drop-shadow(0 5px 9px rgba(0, 0, 0, .45));
   margin: -6px 8px -6px 0; }
 @media (prefers-reduced-motion: no-preference) {
   .overlay:not(.hidden) .mascot-img, .overlay:not(.hidden) .mascot-shout {
-    animation: mascotPop .5s cubic-bezier(.3, 1.6, .5, 1); }
+    animation: mascotPop .6s cubic-bezier(.3, 1.4, .5, 1); }
 }
-@keyframes mascotPop { 0% { transform: scale(.3); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
+@keyframes mascotPop {
+  0% { transform: scale(.2) rotate(-8deg); opacity: 0; }
+  62% { transform: scale(1.12) rotate(2deg); opacity: 1; }
+  100% { transform: scale(1) rotate(0deg); opacity: 1; }
+}
 
 /* Sieger-Szene als Hintergrund des Endstands (Bild + dunkle Überlagerung) */
 .result-card.scene { background-size: cover; background-position: center top; color: #ffe8b0; }
