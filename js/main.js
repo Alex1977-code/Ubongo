@@ -289,6 +289,10 @@ async function connect() {
   return net;
 }
 
+// Anleitung zur QR-Kopplung (inkl. Hotspot- und Flugzeug-Tipps)
+$('direct-help').addEventListener('click', () => $('overlay-direct-help').classList.remove('hidden'));
+$('direct-help-close').addEventListener('click', () => $('overlay-direct-help').classList.add('hidden'));
+
 // Direktverbindung (QR-Kopplung, ohne Spiel-Server): übernimmt die Rolle von net
 const directUI = initDirectUI({
   getName: () => getName() || 'Spieler',
