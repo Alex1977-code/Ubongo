@@ -354,7 +354,12 @@ export class Game {
     const ranking = msg.ranking.map(r => ({ name: r.name, me: r.id === this.o.net.myId,
       av: avatarNum(r.name), total: r.total, gems: r.gems }));
     recordMatch({ won: !!ranking[0]?.me, points: this.myTotal, gems: this.myGems });
-    this._showFinal(ranking, 'Im Online-Highscore gespeichert! 🌍');
+    // Direktverbindung: kein Server, also lokal auf diesem Handy speichern
+    if (this.o.direct) addLocalScore({ name: this.o.name, score: this.myTotal,
+      difficulty: this.o.difficulty, date: new Date().toISOString().slice(0, 10) });
+    this._showFinal(ranking, this.o.direct
+      ? 'Highscore auf diesem Handy gespeichert! ⭐'
+      : 'Im Online-Highscore gespeichert! 🌍');
     if (ranking[0]?.me) confetti($('confetti'), 140);
   }
 

@@ -63,6 +63,22 @@ dem jeweiligen Server. Der Port lässt sich über die Umgebungsvariable `PORT`
 ändern; bricht die Verbindung ab (Bildschirm aus, WLAN-Wechsel), verbindet die
 App automatisch neu und setzt die laufende Runde fort.
 
+### 📶 Direktverbindung – 2 Handys ganz ohne Server
+
+Unter **„Mit Freunden spielen“ → Direktverbindung** koppeln sich zwei Handys
+direkt per WebRTC – es wird kein Spiel-Server gebraucht:
+
+1. Gastgeber tippt **„Raum eröffnen (QR zeigen)“** – ein QR-Code erscheint
+2. Der Gast scannt ihn einfach mit der **normalen Handy-Kamera** (öffnet die App)
+   oder in der App über **„Beitreten (QR scannen)“**
+3. Das Gast-Handy zeigt einen **Antwort-Code** – der Gastgeber scannt ihn in
+   der App über **„Antwort scannen“** – verbunden!
+
+Funktioniert im selben WLAN oder über den **Handy-Hotspot**, also auch komplett
+ohne Internet (die App vorher einmal online öffnen, damit sie installiert ist).
+Für Handys ohne Kamera gibt es unter „Ohne Kamera koppeln“ Codes zum
+Kopieren/Einfügen. Highscores landen dabei lokal auf dem Handy.
+
 ### 📲 Als App installieren
 
 Seite im Handy-Browser öffnen → Browser-Menü → **„Zum Startbildschirm hinzufügen“**.

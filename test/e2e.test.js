@@ -8,7 +8,11 @@ const SHOT_DIR = process.env.SHOT_DIR || '.';
 const srv = spawn('node', ['server.js'], { env: { ...process.env, PORT }, stdio: 'pipe' });
 await new Promise(res => srv.stdout.on('data', d => { if (String(d).includes('läuft')) res(); }));
 
-const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
+const browser = await chromium.launch({
+  executablePath: '/opt/pw-browsers/chromium',
+  // WebRTC-Loopback im Test: echte lokale IPs statt mDNS-Namen verwenden
+  args: ['--disable-features=WebRtcHideLocalIpsWithMdns'],
+});
 let fails = 0;
 const assert = (c, m) => { console.log((c ? 'OK  ' : 'FAIL') + ' ' + m); if (!c) fails++; };
 
@@ -240,7 +244,57 @@ try {
   assert(online.some(h => h.name === 'Alex') && online.some(h => h.name === 'Mia'), 'Online-Highscores gespeichert');
   await A.screenshot({ path: SHOT_DIR + '/shot-mp-final.png' });
 
-  for (const page of [p, A, B]) {
+  // ---------- Direktverbindung (WebRTC, ohne Server) ----------
+  // Kamera gibt es im Test nicht – gekoppelt wird über die Codes zum Kopieren.
+  const C = await newPhone('DirektHost'), D = await newPhone('DirektGast');
+  await C.click('[data-goto="online"]');
+  await C.fill('#online-name', 'Carla');
+  await C.click('#direct-host');
+  await C.waitForSelector('#overlay-direct:not(.hidden)');
+  await C.waitForFunction(() => document.getElementById('direct-mycode').value.startsWith('U'), null, { timeout: 15000 });
+  const offerCode = await C.inputValue('#direct-mycode');
+  assert(offerCode.length > 50, 'Direkt: Einladungs-Code erzeugt');
+  await C.screenshot({ path: SHOT_DIR + '/shot-direct-host.png' });
+
+  await D.click('[data-goto="online"]');
+  await D.fill('#online-name', 'Deniz');
+  await D.click('#direct-join');
+  await D.waitForSelector('#overlay-direct:not(.hidden)');
+  await D.fill('#direct-paste', offerCode);
+  await D.click('#direct-apply');
+  await D.waitForFunction(() => document.getElementById('direct-mycode').value.startsWith('U'), null, { timeout: 15000 });
+  const answerCode = await D.inputValue('#direct-mycode');
+  assert(answerCode.length > 50, 'Direkt: Antwort-Code erzeugt');
+
+  await C.click('#direct-manual summary');
+  await C.fill('#direct-paste', answerCode);
+  await C.click('#direct-apply');
+  await C.waitForSelector('#screen-lobby.active', { timeout: 20000 });
+  await D.waitForSelector('#screen-lobby.active', { timeout: 20000 });
+  await C.waitForFunction(() => document.querySelectorAll('#lobby-players li').length === 2);
+  assert(true, 'Direkt: Beide Handys per WebRTC in der Lobby');
+  assert((await C.textContent('#lobby-code')).includes('📶'), 'Direkt: Lobby zeigt Direktverbindung');
+  await C.screenshot({ path: SHOT_DIR + '/shot-direct-lobby.png' });
+
+  await C.click('#lobby-rounds .chip[data-val="1"]');
+  await C.click('#lobby-diff .chip[data-val="leicht"]');
+  await C.click('#lobby-start');
+  await C.waitForFunction(() => window.__ubongo.game && window.__ubongo.game.mode === 'online');
+  await D.waitForFunction(() => window.__ubongo.game && window.__ubongo.game.mode === 'online');
+  assert(true, 'Direkt: Runde auf beiden Handys gestartet');
+  await C.waitForFunction(() => window.__ubongo.game.board && !window.__ubongo.game.board.locked, null, { timeout: 8000 });
+  await D.waitForFunction(() => window.__ubongo.game.board && !window.__ubongo.game.board.locked, null, { timeout: 8000 });
+  await C.evaluate(() => { const g = window.__ubongo.game; g.board.reveal(g.card.solution); g._solved(); });
+  await D.waitForFunction(() => document.querySelector('.opp.done'), null, { timeout: 5000 });
+  assert(true, 'Direkt: Gast sieht Fortschritt des Gastgebers');
+  await D.evaluate(() => { const g = window.__ubongo.game; g.board.reveal(g.card.solution); g._solved(); });
+  await C.waitForSelector('#overlay-final:not(.hidden)', { timeout: 10000 });
+  await D.waitForSelector('#overlay-final:not(.hidden)', { timeout: 10000 });
+  assert(true, 'Direkt: Endstand auf beiden Handys');
+  assert((await C.textContent('#final-note')).includes('diesem Handy'),
+    'Direkt: Highscore wird lokal gespeichert (kein Server)');
+
+  for (const page of [p, A, B, C, D]) {
     for (const err of page.errors) { console.log('FAIL Browserfehler: ' + err); fails++; }
   }
 } catch (e) {

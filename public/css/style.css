@@ -377,3 +377,19 @@ body.theme-dschungel .fly { background: #baffdb; box-shadow: 0 0 9px 3px rgba(14
 .admit-btns .btn { flex: 1; font-size: 15px; padding: 10px 8px; }
 @keyframes admitPulse { 50% { box-shadow: 0 0 0 7px rgba(245, 166, 35, .08); } }
 @media (prefers-reduced-motion: reduce) { .admit-box { animation: none; } }
+
+/* ===== Direktverbindung (QR-Kopplung ohne Server) ===== */
+.direct-card { text-align: center; width: min(92%, 390px); }
+.direct-qr { background: #fff; border-radius: 14px; padding: 10px; margin: 10px auto;
+  width: min(74vw, 290px); box-shadow: 0 6px 18px rgba(0,0,0,.25); }
+.direct-qr svg { display: block; width: 100%; height: auto; }
+.direct-video { width: 100%; max-height: 44vh; border-radius: 14px; background: #000;
+  object-fit: cover; margin: 8px 0; }
+.direct-manual { text-align: left; margin: 10px 0; }
+.direct-manual summary { cursor: pointer; color: #7a2e0e; font-weight: 700; padding: 4px 0; }
+.direct-code { width: 100%; font-family: ui-monospace, monospace; font-size: 11px;
+  word-break: break-all; margin: 4px 0 6px; resize: none; }
+.btn-small { padding: 8px 14px; font-size: 14px; }
+#direct-cancel { margin-top: 10px; }
+.join-row #direct-host, .join-row #direct-join { flex: 1; }
+.join-row .btn small { display: block; font-weight: 400; font-size: 11px; opacity: .85; }
