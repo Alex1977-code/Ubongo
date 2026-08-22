@@ -255,6 +255,7 @@
         <button id="direct-host" class="btn btn-primary">Raum eröffnen<br><small>QR zeigen</small></button>
         <button id="direct-join" class="btn">Beitreten<br><small>QR scannen</small></button>
       </div>
+      <button id="direct-help" class="btn btn-small direct-help-btn">❓ Anleitung zum Koppeln</button>
       <p class="hint">Funktioniert im selben WLAN oder über den Handy-Hotspot.
         Der Gast kann den QR-Code auch einfach mit der normalen Handy-Kamera scannen.</p>
 
@@ -398,7 +399,13 @@
       <h3>⏩ Schnellvorlauf</h3>
       <p>Sobald du gelöst hast, läuft die Restzeit der Computer-Gegner im Schnellvorlauf – kein langes Warten.</p>
       <h3>📱 Mit Freunden spielen</h3>
-      <p>Ein Rechner im WLAN startet den Ubongo-Server (<code>npm start</code>). Alle Handys öffnen die Adresse des Servers im Browser. Einer erstellt einen <b>Raum</b>, die anderen geben den <b>4-stelligen Code</b> ein. Bis zu 8 Spieler!</p>
+      <p>Unter „Mit Freunden spielen“ erstellt einer einen <b>Raum</b>, die anderen geben den <b>4-stelligen Code</b> ein – der Spiel-Server ist fest hinterlegt, es muss nichts eingerichtet werden. Bis zu 8 Spieler! Der Gastgeber lässt jeden Mitspieler per Klopfzeichen herein.</p>
+      <h3>📶 Direktverbindung (2 Handys, ohne Internet)</h3>
+      <p>Zwei Handys koppeln sich per <b>QR-Code</b> direkt – ganz ohne Server:
+         Gastgeber tippt <b>„Raum eröffnen“</b>, der Gast scannt den Code (Handy-Kamera oder in der App),
+         dann scannt der Gastgeber den <b>Antwort-Code</b> des Gastes über „📷 Antwort scannen“. Fertig!
+         Funktioniert im selben WLAN oder über den Handy-Hotspot – die ausführliche
+         Schritt-für-Schritt-Anleitung (auch fürs ✈️ Flugzeug) steht direkt neben den Knöpfen.</p>
       <h3>📲 Als App installieren</h3>
       <p>Im Browser-Menü „Zum Startbildschirm hinzufügen“ wählen – dann startet Ubongo wie eine echte App, auch offline (gegen Computer).</p>
     </div>
@@ -423,6 +430,43 @@
       </details>
       <p id="direct-hint" class="hint"></p>
       <button id="direct-cancel" class="btn">Abbrechen</button>
+    </div>
+  </div>
+
+  <!-- ===== Direktverbindung: Anleitung ===== -->
+  <div class="overlay hidden" id="overlay-direct-help">
+    <div class="result-card direct-card direct-help">
+      <h3>📶 So koppelt ihr zwei Handys</h3>
+      <ol class="direct-steps">
+        <li><b>Gastgeber:</b> „Raum eröffnen“ tippen – ein QR-Code erscheint.</li>
+        <li><b>Gast:</b> den Code scannen – am einfachsten mit der normalen
+          <b>Handy-Kamera</b> (die App öffnet sich von selbst), oder in der App
+          über „Beitreten (QR scannen)“.</li>
+        <li>Das Gast-Handy zeigt einen <b>Antwort-Code</b>. Der Gastgeber tippt
+          auf <b>„📷 Antwort scannen“</b> und scannt ihn ab – verbunden!
+          Danach geht es ganz normal in der Lobby weiter.</li>
+      </ol>
+      <h4>🏠 Im selben WLAN</h4>
+      <p>Sind beide Handys im selben WLAN, einfach wie oben koppeln – Internet
+         wird dabei nicht gebraucht.</p>
+      <h4>📡 Unterwegs: Handy-Hotspot</h4>
+      <p>Kein WLAN da? Ein Handy schaltet seinen <b>Hotspot</b> ein, das andere
+         verbindet sich damit. Die Meldung „kein Internet“ ist in Ordnung –
+         das Spiel funkt nur zwischen den beiden Handys.</p>
+      <h4>✈️ Im Flugzeug</h4>
+      <p>Flugmodus an, dann <b>WLAN wieder einschalten</b> (das ist erlaubt).
+         Den Hotspot macht am besten ein <b>Android-Handy</b> auf – iPhones
+         können das im Flugmodus nicht. Im Flieger die Codes am besten
+         <b>in der App</b> scannen („Beitreten (QR scannen)“) statt mit der
+         Kamera-App. Tipp: einmal zu Hause im Flugmodus ausprobieren!</p>
+      <h4>📷 Ohne Kamera</h4>
+      <p>Unter „Ohne Kamera koppeln“ lassen sich die Codes auch kopieren und
+         auf dem anderen Handy einfügen (z. B. per Nachricht).</p>
+      <p class="hint">Wichtig: Beide Handys müssen die App vorher einmal mit
+         Internet geöffnet haben – danach ist sie auf dem Handy gespeichert und
+         läuft komplett offline. Die Direktverbindung ist für 2 Spieler;
+         mit mehr Spielern nutzt ihr den normalen Raum mit Code.</p>
+      <button id="direct-help-close" class="btn btn-primary">Verstanden</button>
     </div>
   </div>
 

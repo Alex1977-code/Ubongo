@@ -249,6 +249,13 @@ try {
   const C = await newPhone('DirektHost'), D = await newPhone('DirektGast');
   await C.click('[data-goto="online"]');
   await C.fill('#online-name', 'Carla');
+  await C.click('#direct-help');
+  await C.waitForSelector('#overlay-direct-help:not(.hidden)');
+  assert((await C.textContent('#overlay-direct-help')).includes('Flugzeug'),
+    'Direkt: Anleitung mit Flugzeug-Tipps öffnet sich');
+  await C.screenshot({ path: SHOT_DIR + '/shot-direct-help.png' });
+  await C.click('#direct-help-close');
+  await C.waitForSelector('#overlay-direct-help.hidden', { state: 'attached' });
   await C.click('#direct-host');
   await C.waitForSelector('#overlay-direct:not(.hidden)');
   await C.waitForFunction(() => document.getElementById('direct-mycode').value.startsWith('U'), null, { timeout: 15000 });
