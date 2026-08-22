@@ -248,6 +248,16 @@
       </div>
       <p id="online-status" class="status"></p>
 
+      <div class="divider"><span>oder</span></div>
+
+      <p class="field-label">📶 Direktverbindung – 2 Handys, ganz ohne Internet</p>
+      <div class="join-row">
+        <button id="direct-host" class="btn btn-primary">Raum eröffnen<br><small>QR zeigen</small></button>
+        <button id="direct-join" class="btn">Beitreten<br><small>QR scannen</small></button>
+      </div>
+      <p class="hint">Funktioniert im selben WLAN oder über den Handy-Hotspot.
+        Der Gast kann den QR-Code auch einfach mit der normalen Handy-Kamera scannen.</p>
+
       <label class="field-label" for="online-server">Spiel-Server (optional)</label>
       <input id="online-server" class="input" placeholder="z. B. ubongo-server.onrender.com" autocapitalize="off" autocomplete="off">
       <p class="hint">Der Standard-Server ist fest hinterlegt – einfach leer lassen.<br>
@@ -266,7 +276,7 @@
           <button class="btn" id="admit-no">❌ Ablehnen</button>
         </div>
       </div>
-      <p class="field-label center">Raumcode – Freunde geben ihn ein:</p>
+      <p class="field-label center" id="lobby-code-label">Raumcode – Freunde geben ihn ein:</p>
       <div class="room-code" id="lobby-code">····</div>
       <ul class="player-list" id="lobby-players"></ul>
       <div id="lobby-host-controls">
@@ -393,6 +403,28 @@
       <p>Im Browser-Menü „Zum Startbildschirm hinzufügen“ wählen – dann startet Ubongo wie eine echte App, auch offline (gegen Computer).</p>
     </div>
   </section>
+
+  <!-- ===== Direktverbindung: QR-Kopplung (global, über jedem Bildschirm) ===== -->
+  <div class="overlay hidden" id="overlay-direct">
+    <div class="result-card direct-card">
+      <h3 id="direct-title">📶 Direkt verbinden</h3>
+      <p id="direct-status" class="status"></p>
+      <video id="direct-video" class="direct-video hidden" playsinline muted></video>
+      <div id="direct-qr" class="direct-qr hidden"></div>
+      <button id="direct-scan" class="btn btn-primary hidden">📷 Antwort scannen</button>
+      <details id="direct-manual" class="direct-manual hidden">
+        <summary>Ohne Kamera koppeln (Codes kopieren)</summary>
+        <label class="field-label" for="direct-mycode">Dein Code – dem anderen Handy geben:</label>
+        <textarea id="direct-mycode" class="input direct-code" readonly rows="3"></textarea>
+        <button id="direct-copy" class="btn btn-small">Code kopieren</button>
+        <label class="field-label" for="direct-paste">Code vom anderen Handy:</label>
+        <textarea id="direct-paste" class="input direct-code" rows="3" placeholder="Hier einfügen …"></textarea>
+        <button id="direct-apply" class="btn btn-small btn-primary">Übernehmen</button>
+      </details>
+      <p id="direct-hint" class="hint"></p>
+      <button id="direct-cancel" class="btn">Abbrechen</button>
+    </div>
+  </div>
 
 </div>
 <script type="module" src="js/main.js"></script>

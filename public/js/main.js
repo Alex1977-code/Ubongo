@@ -8,6 +8,7 @@ import { DEFAULT_SERVER } from './config.js';
 import { loadAssets, assetURL, avatarNum } from './assets.js';
 import { setPieceSkin } from './board.js';
 import { unlock, isMuted, toggleMuted, isMusicOn, toggleMusic } from './sound.js';
+import { initDirectUI } from './direct-ui.js';
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[<>&]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]));
@@ -253,36 +254,51 @@ function sendConfig() {
     rounds: parseInt(lobbyRounds.get(), 10), timeFactor: parseFloat(lobbyTempo.get()) });
 }
 
+function bindNetHandlers(n) {
+  n.on('you', (msg) => { if (msg.token) sessionToken = msg.token; })
+   .on('pending', () => { $('online-status').textContent = '🚪 Angeklopft – der Gastgeber lässt dich gleich rein …'; })
+   .on('knock', (msg) => { knocks.push(msg); renderKnock(); })
+   .on('knockgone', (msg) => { knocks = knocks.filter(k => k.reqId !== msg.reqId); renderKnock(); })
+   .on('room', (msg) => renderLobby(msg))
+   .on('error', (msg) => {
+     $('online-status').textContent = msg.msg;
+     if (document.querySelector('#screen-lobby.active')) $('lobby-status').textContent = msg.msg;
+     if (msg.fatal) endGame('online');
+   })
+   .on('round', (msg) => {
+     if (!game) {
+       game = new Game({ mode: 'online', name: getName() || 'Spieler', direct: !!n.direct,
+                         difficulty: msg.difficulty, rounds: msg.of, net });
+       show('game');
+     }
+     game.o.net = net;
+     game.o.difficulty = msg.difficulty;
+     game.onRound(msg);
+   })
+   .on('progress', (msg) => game && game.onProgress(msg))
+   .on('roundResult', (msg) => game && game.onRoundResult(msg))
+   .on('final', (msg) => game && game.onFinal(msg))
+   .on('_close', () => handleDisconnect());
+}
+
 async function connect() {
   if (net && net.connected) return net;
   net = new Net();
-  net.on('you', (msg) => { if (msg.token) sessionToken = msg.token; })
-     .on('pending', () => { $('online-status').textContent = '🚪 Angeklopft – der Gastgeber lässt dich gleich rein …'; })
-     .on('knock', (msg) => { knocks.push(msg); renderKnock(); })
-     .on('knockgone', (msg) => { knocks = knocks.filter(k => k.reqId !== msg.reqId); renderKnock(); })
-     .on('room', (msg) => renderLobby(msg))
-     .on('error', (msg) => {
-       $('online-status').textContent = msg.msg;
-       if (document.querySelector('#screen-lobby.active')) $('lobby-status').textContent = msg.msg;
-       if (msg.fatal) endGame('online');
-     })
-     .on('round', (msg) => {
-       if (!game) {
-         game = new Game({ mode: 'online', name: getName() || 'Spieler',
-                           difficulty: msg.difficulty, rounds: msg.of, net });
-         show('game');
-       }
-       game.o.net = net;
-       game.o.difficulty = msg.difficulty;
-       game.onRound(msg);
-     })
-     .on('progress', (msg) => game && game.onProgress(msg))
-     .on('roundResult', (msg) => game && game.onRoundResult(msg))
-     .on('final', (msg) => game && game.onFinal(msg))
-     .on('_close', () => handleDisconnect());
+  bindNetHandlers(net);
   await net.connect(serverBase());
   return net;
 }
+
+// Direktverbindung (QR-Kopplung, ohne Spiel-Server): übernimmt die Rolle von net
+const directUI = initDirectUI({
+  getName: () => getName() || 'Spieler',
+  adopt: (n) => {
+    if (net) net.close();
+    sessionToken = null;
+    net = n;
+    bindNetHandlers(n);
+  },
+});
 
 $('online-create').addEventListener('click', async () => {
   const name = $('online-name').value.trim() || 'Spieler';
@@ -318,8 +334,12 @@ $('online-join').addEventListener('click', async () => {
 
 function renderLobby(msg) {
   if (game && game.mode === 'online') { game.setRoster(msg.players); return; } // mitten im Spiel: nur Namen aktualisieren
+  directUI.onLobby();          // ggf. offene QR-Kopplung schließen
   show('lobby');
   $('lobby-code').textContent = msg.code;
+  $('lobby-code-label').textContent = net && net.direct
+    ? 'Direkt verbunden – ohne Internet:'
+    : 'Raumcode – Freunde geben ihn ein:';
   const me = msg.players.find(p => p.id === net.myId);
   isHost = !!(me && me.host);
   $('lobby-players').innerHTML = msg.players.map(p => {
@@ -337,7 +357,9 @@ function renderLobby(msg) {
   startBtn.disabled = alone;
   startBtn.textContent = alone ? '⏳ Warten auf Mitspieler …' : 'Spiel starten';
   $('lobby-status').textContent = alone
-    ? 'Mindestens 2 Spieler nötig – gib den Raumcode weiter! Deine Freunde brauchen denselben Spiel-Link und dieselbe Server-Adresse.'
+    ? (net && net.direct
+        ? 'Der Mitspieler ist nicht mehr verbunden – geht zurück und koppelt euch neu.'
+        : 'Mindestens 2 Spieler nötig – gib den Raumcode weiter! Deine Freunde brauchen denselben Spiel-Link und dieselbe Server-Adresse.')
     : '';
   // Host-Auswahl synchron halten
   document.querySelectorAll('#lobby-diff .chip').forEach(c => c.classList.toggle('active', c.dataset.val === msg.difficulty));
