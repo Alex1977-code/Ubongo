@@ -6,7 +6,7 @@ import { BoardView } from './board.js';
 import { makeBots, newRound, botProgress, botTick } from './ai.js';
 import { addLocalScore, recordSolve, recordMatch } from './highscore.js';
 import { roundGems, gemPoints, gemHTML, gemRow } from './gems.js';
-import { assetURL } from './assets.js';
+import { assetURL, avatarNum } from './assets.js';
 import * as snd from './sound.js';
 
 const $ = (id) => document.getElementById(id);
@@ -312,8 +312,8 @@ export class Game {
 
   _finalSolo() {
     const ranking = [
-      { name: this.o.name, me: true, total: this.myTotal, gems: this.myGems },
-      ...this.bots.map(b => ({ name: `${b.emoji} ${b.name}`, total: b.total, gems: b.gems })),
+      { name: this.o.name, me: true, av: avatarNum(this.o.name), total: this.myTotal, gems: this.myGems },
+      ...this.bots.map(b => ({ name: b.name, emoji: b.emoji, av: b.avatar, total: b.total, gems: b.gems })),
     ].sort((a, b) => b.total - a.total);
     addLocalScore({ name: this.o.name, score: this.myTotal, difficulty: this.o.difficulty,
                     date: new Date().toISOString().slice(0, 10) });
@@ -351,7 +351,8 @@ export class Game {
 
   onFinal(msg) {
     $('overlay-result').classList.add('hidden');
-    const ranking = msg.ranking.map(r => ({ name: r.name, me: r.id === this.o.net.myId, total: r.total, gems: r.gems }));
+    const ranking = msg.ranking.map(r => ({ name: r.name, me: r.id === this.o.net.myId,
+      av: avatarNum(r.name), total: r.total, gems: r.gems }));
     recordMatch({ won: !!ranking[0]?.me, points: this.myTotal, gems: this.myGems });
     this._showFinal(ranking, 'Im Online-Highscore gespeichert! 🌍');
     if (ranking[0]?.me) confetti($('confetti'), 140);
@@ -361,10 +362,17 @@ export class Game {
     const won = !!ranking[0]?.me;
     // Maskottchen-Reaktion: Sieg/Trost-Bild, sonst das allgemeine Maskottchen
     const mascot = $('final-mascot');
-    const mSrc = assetURL(won ? 'mascot-sieg' : 'mascot-trost') || assetURL('mascot');
+    const mSrc = won
+      ? (assetURL('mascot-jubel') || assetURL('mascot-sieg') || assetURL('mascot'))
+      : (assetURL('mascot-trost') || assetURL('mascot'));
     if (mSrc) { mascot.src = mSrc; mascot.classList.remove('hidden'); }
     else mascot.classList.add('hidden');
     $('final-hero').classList.toggle('won', won);
+    // Feuerwerk (Schwarz-Grund-Bild, leuchtet per Screen-Blend über dem dunklen Overlay)
+    const fx = $('final-fx');
+    const fxSrc = won && assetURL('feuerwerk');
+    if (fxSrc) { fx.src = fxSrc; fx.classList.remove('hidden'); }
+    else fx.classList.add('hidden');
     $('final-title').textContent = won ? '🎉 Gewonnen!' : '🏆 Endstand';
     if (won) this._gemRain();
     // Sieger-Szene als Hintergrund der Ergebnistafel (nur bei Sieg + Asset)
@@ -379,8 +387,11 @@ export class Game {
       ranking.map((r, i) => {
         const medal = i === 0 ? '<span class="medal-gold">🥇</span>' : medals[i] || (i + 1) + '.';
         const spark = i === 0 ? ' <span class="sparkle">✨</span>' : '';
+        const avSrc = r.av && assetURL('avatar-' + r.av);
+        const av = avSrc ? `<img class="rank-avatar" src="${avSrc}" alt="">` : (r.emoji ? r.emoji + ' ' : '');
         return `<tr class="${r.me ? 'me' : ''}"><td>${medal}</td>` +
-          `<td>${esc(r.name)}${spark}<div class="gem-cell">${gemRow(r.gems || [], 15)}</div></td><td>${r.total}</td></tr>`;
+          `<td><div class="rank-name">${av}${esc(r.name)}${spark}</div>` +
+          `<div class="gem-cell">${gemRow(r.gems || [], 15)}</div></td><td>${r.total}</td></tr>`;
       }).join('');
     $('final-note').textContent = note;
     $('overlay-final').classList.remove('hidden');
@@ -427,11 +438,14 @@ export class Game {
       }).join('');
     } else {
       const players = (this.oppState || []).filter(p => p.id !== this.o.net.myId);
-      host.innerHTML = players.map(p =>
-        `<div class="opp ${p.done ? (p.ms != null ? 'done' : 'dnf') : ''} ${p.off ? 'dnf' : ''}">` +
-        `<div class="opp-name">${esc(p.name)}<span style="margin-left:auto">` +
-        `${p.off ? '📴' : p.done ? (p.ms != null ? '✓ ' + fmt2(p.ms) : '✗') : '…'}</span></div>` +
-        `<div class="opp-bar"><div class="opp-fill" style="width:${p.done ? 100 : Math.max(4, p.prog || 0)}%"></div></div></div>`).join('');
+      host.innerHTML = players.map(p => {
+        const avSrc = assetURL('avatar-' + avatarNum(p.name));
+        const av = avSrc ? `<img class="opp-avatar" src="${avSrc}" alt=""> ` : '';
+        return `<div class="opp ${p.done ? (p.ms != null ? 'done' : 'dnf') : ''} ${p.off ? 'dnf' : ''}">` +
+          `<div class="opp-name">${av}${esc(p.name)}<span style="margin-left:auto">` +
+          `${p.off ? '📴' : p.done ? (p.ms != null ? '✓ ' + fmt2(p.ms) : '✗') : '…'}</span></div>` +
+          `<div class="opp-bar"><div class="opp-fill" style="width:${p.done ? 100 : Math.max(4, p.prog || 0)}%"></div></div></div>`;
+      }).join('');
     }
   }
 
