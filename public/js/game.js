@@ -364,6 +364,9 @@ export class Game {
     const mSrc = assetURL(won ? 'mascot-sieg' : 'mascot-trost') || assetURL('mascot');
     if (mSrc) { mascot.src = mSrc; mascot.classList.remove('hidden'); }
     else mascot.classList.add('hidden');
+    $('final-hero').classList.toggle('won', won);
+    $('final-title').textContent = won ? '🎉 Gewonnen!' : '🏆 Endstand';
+    if (won) this._gemRain();
     // Sieger-Szene als Hintergrund der Ergebnistafel (nur bei Sieg + Asset)
     const card = $('overlay-final').querySelector('.result-card');
     const scene = won && assetURL('sieg-szene');
@@ -382,6 +385,30 @@ export class Game {
     $('final-note').textContent = note;
     $('overlay-final').classList.remove('hidden');
     snd.victory(); // Sieg-Fanfare zum Endstand
+  }
+
+  // Sieg-Feier: Edelsteine regnen über den ganzen Bildschirm
+  _gemRain() {
+    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reduce) return;
+    const screen = $('screen-game');
+    const r = screen.getBoundingClientRect();
+    const types = ['rubin', 'saphir', 'smaragd', 'bernstein'];
+    for (let i = 0; i < 16; i++) {
+      const el = document.createElement('div');
+      el.className = 'fly-gem';
+      const size = 26 + Math.random() * 22;
+      el.innerHTML = gemHTML(types[i % 4], size);
+      el.style.left = (Math.random() * (r.width - size)) + 'px';
+      el.style.top = (-60 - Math.random() * 120) + 'px';
+      screen.appendChild(el);
+      const rot = (Math.random() * 360 - 180).toFixed(0);
+      const anim = el.animate([
+        { transform: 'translateY(0) rotate(0deg)', opacity: 1 },
+        { transform: `translateY(${r.height + 240}px) rotate(${rot}deg)`, opacity: 1 },
+      ], { duration: 2600 + Math.random() * 1800, delay: i * 130, easing: 'cubic-bezier(.35,0,.8,.7)', fill: 'forwards' });
+      anim.onfinish = () => el.remove();
+    }
   }
 
   // ---------- Anzeige der Gegner ----------

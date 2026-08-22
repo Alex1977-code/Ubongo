@@ -575,9 +575,9 @@ export class BoardView {
     let kristallGrad = null;
     if (skin === 'kristall') {
       kristallGrad = ctx.createLinearGradient(ox, oy, ox + pb.w * c, oy + pb.h * c);
-      kristallGrad.addColorStop(0, shade(col, 0.5));
-      kristallGrad.addColorStop(0.5, col);
-      kristallGrad.addColorStop(1, shade(col, -0.32));
+      kristallGrad.addColorStop(0, shade(col, 0.62));
+      kristallGrad.addColorStop(0.45, col);
+      kristallGrad.addColorStop(1, shade(col, -0.42));
     }
 
     for (const [x, y] of cells) {
@@ -601,11 +601,17 @@ export class BoardView {
         grad.addColorStop(0, shade(col, 0.22));
         grad.addColorStop(1, shade(col, -0.12));
       }
-      ctx.fillStyle = skin === 'kristall' ? kristallGrad : grad;
       const x0 = px + (w ? 0 : g), y0 = py + (n ? 0 : g);
       const x1 = px + c - (e ? 0 : g), y1 = py + c - (s ? 0 : g);
+      if (skin === 'kristall') {
+        // Frost-Unterlage: hält die Farben auch über dunklem Holz leuchtend bunt
+        ctx.fillStyle = 'rgba(255,255,255,.45)';
+        this._rrEdges(ctx, x0, y0, x1 - x0, y1 - y0, c * rad, !n && !w, !n && !e, !s && !e, !s && !w);
+        ctx.fill();
+      }
+      ctx.fillStyle = skin === 'kristall' ? kristallGrad : grad;
       if (skin === 'juwelen') ctx.globalAlpha = 0.84; // leicht durchscheinender Kristall
-      if (skin === 'kristall') ctx.globalAlpha = 0.74; // Glas: Untergrund schimmert durch
+      if (skin === 'kristall') ctx.globalAlpha = 0.88; // Glas: Untergrund schimmert dezent durch
       this._rrEdges(ctx, x0, y0, x1 - x0, y1 - y0, c * rad, !n && !w, !n && !e, !s && !e, !s && !w);
       ctx.fill();
       if (skin === 'juwelen' || skin === 'kristall') ctx.globalAlpha = 1;
@@ -683,12 +689,12 @@ export class BoardView {
       // Heller Lichtkern
       const cxp = ox + pb.w * c * 0.38, cyp = oy + pb.h * c * 0.32;
       const core = ctx.createRadialGradient(cxp, cyp, 0, cxp, cyp, Math.max(pb.w, pb.h) * c * 0.7);
-      core.addColorStop(0, 'rgba(255,255,255,.36)');
+      core.addColorStop(0, 'rgba(255,255,255,.5)');
       core.addColorStop(1, 'rgba(255,255,255,0)');
       ctx.fillStyle = core;
       ctx.fillRect(ox, oy, pb.w * c, pb.h * c);
       // Diagonale Facetten-Streifen
-      ctx.strokeStyle = 'rgba(255,255,255,.15)';
+      ctx.strokeStyle = 'rgba(255,255,255,.22)';
       ctx.lineWidth = c * 0.11;
       ctx.beginPath();
       for (let i = -pb.h; i < pb.w; i++) {
@@ -740,8 +746,16 @@ export class BoardView {
       outline();
       outline(); // zweiter Strich verstärkt das Leuchten
       ctx.restore();
+    } else if (skin === 'kristall') {
+      // Juwelen-Kante: dunkle Kontur mit hellem Glaslicht darin
+      ctx.strokeStyle = shade(col, -0.55);
+      ctx.lineWidth = 2.4;
+      outline();
+      ctx.strokeStyle = 'rgba(255,255,255,.65)';
+      ctx.lineWidth = 1;
+      outline();
     } else {
-      ctx.strokeStyle = skin === 'kristall' ? 'rgba(255,255,255,.5)' : 'rgba(30,10,0,.45)';
+      ctx.strokeStyle = 'rgba(30,10,0,.45)';
       ctx.lineWidth = 1.5;
       outline();
     }
