@@ -3,6 +3,7 @@
 
 import { PIECE_MAP, transform, bounds } from './pieces.js';
 import { asset } from './assets.js';
+import { drawGlassPiece, resetGlassCache } from './glass.js';
 import * as snd from './sound.js';
 
 const K = (x, y) => x + ',' + y;
@@ -43,7 +44,9 @@ export class BoardView {
     }));
     this._raf = 0;
     this.reduceMotion = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
-    this._onResize = () => this.layout();
+    // Beim Drehen des Handys aendern sich alle Zellgroessen - die zwischen-
+    // gespeicherten Glas-Bilder der alten Groesse werden nie wieder gebraucht.
+    this._onResize = () => { resetGlassCache(); this.layout(); };
     window.addEventListener('resize', this._onResize);
 
     canvas.addEventListener('pointerdown', e => this._down(e));
@@ -549,6 +552,21 @@ export class BoardView {
   _drawPiece(p, ox, oy, c, selected) {
     const ctx = this.ctx;
     const cells = this.cells(p);
+
+    // Kristall: eigener 3D-Renderer (Normalen-Karte + Phong-Beleuchtung, glass.js).
+    // Kontakt- und Schlagschatten stecken bereits im gerenderten Glas-Bild, ein
+    // vom Aufrufer gesetzter Schatten wuerde sich sonst je Ebene wiederholen.
+    if (PIECE_SKIN === 'kristall') {
+      ctx.save();
+      ctx.shadowColor = 'rgba(0,0,0,0)';
+      ctx.shadowBlur = 0;
+      ctx.shadowOffsetX = 0;
+      ctx.shadowOffsetY = 0;
+      drawGlassPiece(ctx, cells, c, ox, oy, p.color, { selected });
+      ctx.restore();
+      return;
+    }
+
     const has = new Set(cells.map(([x, y]) => K(x, y)));
     const g = Math.max(1, c * 0.03); // Fuge zwischen Teilen
     const skin = PIECE_SKIN;
