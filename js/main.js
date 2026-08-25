@@ -2,10 +2,11 @@
 
 import { Game } from './game.js';
 import { Net } from './net.js';
-import { localScores, onlineScores, getName, setName, getServer, setServer, getStats } from './highscore.js';
+import { localScores, onlineScores, getName, setName, getServer, setServer, getStats,
+         getAvatar, setAvatar } from './highscore.js';
 import { gemRow, GEMS, useGemAssets } from './gems.js';
 import { DEFAULT_SERVER } from './config.js';
-import { loadAssets, assetURL, avatarNum } from './assets.js';
+import { loadAssets, assetURL, avatarURL } from './assets.js';
 import { setPieceSkin } from './board.js';
 import { unlock, isMuted, toggleMuted, isMusicOn, toggleMusic } from './sound.js';
 import { initDirectUI } from './direct-ui.js';
@@ -102,6 +103,35 @@ function setBg(el, url) {
   el.style.backgroundImage = url ? `url("${url}")` : '';
 }
 
+// Spielfigur waehlen: die acht Tier-Bilder plus "automatisch" (aus dem Namen).
+function buildAvatarPicker() {
+  const host = $('design-avatar');
+  if (!host || host.dataset.built) return;
+  for (let i = 1; i <= 8; i++) {
+    const url = assetURL('avatar-' + i);
+    if (!url) continue;
+    const b = document.createElement('button');
+    b.className = 'avatar-opt';
+    b.dataset.val = String(i);
+    b.title = 'Spielfigur ' + i;
+    b.innerHTML = `<img src="${url}" alt="">`;
+    host.appendChild(b);
+  }
+  host.dataset.built = '1';
+  markAvatar();
+}
+function markAvatar() {
+  document.querySelectorAll('#design-avatar .avatar-opt')
+    .forEach(b => b.classList.toggle('active', +b.dataset.val === getAvatar()));
+}
+$('design-avatar').addEventListener('click', (e) => {
+  const b = e.target.closest('.avatar-opt');
+  if (!b) return;
+  setAvatar(+b.dataset.val);
+  markAvatar();
+  if (game) game._renderShelf();          // laufende Partie sofort aktualisieren
+});
+
 chipGroup('design-theme', (v) => { try { localStorage.setItem('ubongo.theme', v); } catch { /* egal */ } applyDesign(); });
 chipGroup('design-skin', (v) => { try { localStorage.setItem('ubongo.skin', v); } catch { /* egal */ } applyDesign(); });
 const syncChips = (id, val) => document.querySelectorAll(`#${id} .chip`)
@@ -109,6 +139,8 @@ const syncChips = (id, val) => document.querySelectorAll(`#${id} .chip`)
 $('open-design').addEventListener('click', () => {
   syncChips('design-theme', getTheme());
   syncChips('design-skin', getSkin());
+  buildAvatarPicker();
+  markAvatar();
   $('overlay-design').classList.remove('hidden');
 });
 $('design-close').addEventListener('click', () => $('overlay-design').classList.add('hidden'));
@@ -126,6 +158,7 @@ loadAssets().then(() => {
     im.alt = '';
     hero.insertBefore(im, hero.querySelector('.title'));
   }
+  buildAvatarPicker();                       // Spielfiguren stehen jetzt bereit
   if (assetURL('mascot-ubongo')) {           // Maskottchen im „UBONGO!“-Overlay
     $('shout-mascot').src = assetURL('mascot-ubongo');
     $('shout-mascot').classList.remove('hidden');
@@ -206,7 +239,7 @@ function lastGame() {
 function startSoloGame(cfg) {
   const name = getName() || 'Du';
   try { localStorage.setItem('ubongo.lastGame', JSON.stringify(cfg)); } catch { /* egal */ }
-  game = new Game({ mode: 'solo', name, ...cfg });
+  game = new Game({ mode: 'solo', name, av: getAvatar(), ...cfg });
   show('game');
   game.startSolo();
 }
@@ -267,8 +300,8 @@ function bindNetHandlers(n) {
    })
    .on('round', (msg) => {
      if (!game) {
-       game = new Game({ mode: 'online', name: getName() || 'Spieler', direct: !!n.direct,
-                         difficulty: msg.difficulty, rounds: msg.of, net });
+       game = new Game({ mode: 'online', name: getName() || 'Spieler', av: getAvatar(),
+                         direct: !!n.direct, difficulty: msg.difficulty, rounds: msg.of, net });
        show('game');
      }
      game.o.net = net;
@@ -296,6 +329,7 @@ $('direct-help-close').addEventListener('click', () => $('overlay-direct-help').
 // Direktverbindung (QR-Kopplung, ohne Spiel-Server): übernimmt die Rolle von net
 const directUI = initDirectUI({
   getName: () => getName() || 'Spieler',
+  getAv: () => getAvatar(),
   adopt: (n) => {
     if (net) net.close();
     sessionToken = null;
@@ -310,7 +344,7 @@ $('online-create').addEventListener('click', async () => {
   $('online-status').textContent = 'Verbinde …';
   try {
     await connect();
-    net.send({ t: 'create', name, difficulty: 'mittel', rounds: 9 });
+    net.send({ t: 'create', name, av: getAvatar(), difficulty: 'mittel', rounds: 9 });
     $('online-status').textContent = '';
   } catch {
     $('online-status').textContent = serverBase()
@@ -327,7 +361,7 @@ $('online-join').addEventListener('click', async () => {
   $('online-status').textContent = 'Verbinde …';
   try {
     await connect();
-    net.send({ t: 'join', code, name });
+    net.send({ t: 'join', code, name, av: getAvatar() });
     $('online-status').textContent = '';
   } catch {
     $('online-status').textContent = serverBase()
@@ -347,7 +381,7 @@ function renderLobby(msg) {
   const me = msg.players.find(p => p.id === net.myId);
   isHost = !!(me && me.host);
   $('lobby-players').innerHTML = msg.players.map(p => {
-    const avSrc = assetURL('avatar-' + avatarNum(p.name));
+    const avSrc = avatarURL(p.name, p.av);
     const av = avSrc ? `<img class="lobby-avatar" src="${avSrc}" alt="">` : '🙂';
     return `<li class="${p.online === false ? 'offline' : ''}">${av}${p.host ? ' 👑' : ''} ${esc(p.name)}` +
       `${p.id === net.myId ? ' (du)' : ''}${p.online === false ? ' 📴' : ''}` +

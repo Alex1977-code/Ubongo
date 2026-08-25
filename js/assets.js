@@ -47,6 +47,11 @@ export const asset = (name) => imgs.get(name) || null;      // Image | null
 export const assetURL = (name) => urls.get(name) || null;   // URL | null
 export const hasAsset = (name) => imgs.has(name);
 
+// Bild-Adresse der Spielfigur: gewaehlte Nummer, sonst aus dem Namen abgeleitet.
+export function avatarURL(name, av) {
+  return assetURL('avatar-' + (av >= 1 && av <= 8 ? av : avatarNum(name)));
+}
+
 // Stabiler Avatar (1–8) aus dem Namen: gleicher Name → gleiches Bild auf allen Geräten.
 export function avatarNum(name) {
   let h = 0;

@@ -87,7 +87,8 @@ async function startScan(onCode) {
 
 // ---------- Auf- und Abbau ----------
 
-export function initDirectUI({ getName, adopt }) {
+export function initDirectUI({ getName, getAv, adopt }) {
+  const av = () => (getAv ? getAv() : 0);
   const status = (s) => { $('direct-status').textContent = s; };
   const hint = (s) => { $('direct-hint').textContent = s; };
 
@@ -138,7 +139,7 @@ export function initDirectUI({ getName, adopt }) {
   // ---------- Gastgeber ----------
   async function startHost() {
     cleanup();
-    const host = new DirectHost(getName());
+    const host = new DirectHost(getName(), av());
     current = { net: host, scan: null };
     adopt(host);
     openOverlay('📶 Raum eröffnen');
@@ -165,7 +166,7 @@ export function initDirectUI({ getName, adopt }) {
   // ---------- Gast ----------
   async function startGuest(offerText) {
     cleanup();
-    const guest = new DirectGuest(getName());
+    const guest = new DirectGuest(getName(), av());
     current = { net: guest, scan: null };
     adopt(guest);
     openOverlay('📶 Raum beitreten');
