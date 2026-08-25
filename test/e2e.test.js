@@ -134,6 +134,11 @@ try {
   assert(gemsInTable > 0, `Edelsteine im Rundenergebnis sichtbar (${gemsInTable})`);
   const shelfShown = await p.evaluate(() => !document.getElementById('gem-shelf').classList.contains('hidden'));
   assert(shelfShown, 'Schatzleiste im Spielfeld sichtbar');
+  const meShown = await p.evaluate(() => {
+    const sh = document.getElementById('gem-shelf');
+    return { av: !!sh.querySelector('.shelf-avatar'), name: (sh.querySelector('.shelf-name') || {}).textContent };
+  });
+  assert(meShown.av && meShown.name === 'Alex', `Eigene Spielfigur + Name im Spiel sichtbar (${meShown.name})`);
   await p.screenshot({ path: SHOT_DIR + '/shot-result.png' });
   await p.click('#result-next');
   await p.waitForSelector('#overlay-final:not(.hidden)');
@@ -157,6 +162,20 @@ try {
   await p.waitForSelector('#solution-note:not(.hidden)', { timeout: 4000 });
   const revealed = await p.evaluate(() => window.__ubongo.game.board.pieces.every(q => q.placed));
   assert(revealed, 'Nicht gelöst: Lösung liegt komplett auf dem Brett');
+  // Der Hinweis sitzt unten über der leeren Ablage - die Lösung auf dem Brett
+  // muss vollständig frei bleiben.
+  const frei = await p.evaluate(() => {
+    const g = window.__ubongo.game, b = g.board;
+    const r = document.getElementById('solution-note').getBoundingClientRect();
+    const cv = b.canvas.getBoundingClientRect();
+    const s = window.devicePixelRatio || 1;
+    // Bereich der gelegten Karte in Bildschirm-Koordinaten
+    const x0 = cv.left + b.bx / s, y0 = cv.top + b.by / s;
+    const x1 = x0 + b.cardBounds.w * b.cell / s, y1 = y0 + b.cardBounds.h * b.cell / s;
+    return r.bottom <= y0 || r.top >= y1 || r.right <= x0 || r.left >= x1;
+  });
+  assert(frei, 'Lösungs-Hinweis verdeckt die Karte nicht');
+  await p.screenshot({ path: SHOT_DIR + '/shot-solution.png' });
   await p.waitForTimeout(4500); // ohne Bestätigung bleibt die Lösung liegen (solo)
   const stillThere = await p.evaluate(() =>
     !document.getElementById('solution-note').classList.contains('hidden') &&
@@ -174,9 +193,14 @@ try {
   await p.click('#open-design');
   await p.waitForSelector('#overlay-design:not(.hidden)');
   await p.screenshot({ path: SHOT_DIR + '/shot-design-menu.png' });
+  const avOpts = await p.evaluate(() => document.querySelectorAll('#design-avatar .avatar-opt').length);
+  assert(avOpts === 9, `Spielfigur-Auswahl zeigt 8 Figuren + automatisch (${avOpts})`);
+  await p.click('#design-avatar .avatar-opt[data-val="3"]');
   await p.click('#design-theme .chip[data-val="dschungel"]');
   await p.click('#design-skin .chip[data-val="juwelen"]');
   await p.click('#design-close');
+  assert(await p.evaluate(() => localStorage.getItem('ubongo.avatar')) === '3',
+    'Gewählte Spielfigur gespeichert');
   const design = await p.evaluate(() => ({
     theme: localStorage.getItem('ubongo.theme'), skin: localStorage.getItem('ubongo.skin'),
     cls: document.body.classList.contains('theme-dschungel'),
