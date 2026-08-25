@@ -1,5 +1,5 @@
 // Service Worker: online immer die neueste Version, offline aus dem Cache (Solo-Modus).
-const CACHE = 'ubongo-v8';
+const CACHE = 'ubongo-v9';
 // Bild-Assets (img/…) gehören bewusst NICHT in die Precache-Liste: sie sind
 // optional, und addAll würde bei fehlenden Dateien komplett scheitern. Der
 // Fetch-Handler unten cached vorhandene Bilder zur Laufzeit automatisch.

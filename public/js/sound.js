@@ -141,41 +141,116 @@ export function hint() { // 💡-Tipp
 }
 
 // ---------- Ambient-Musik ----------
-// Leise Kalimba-artige Schleife: pentatonische Skala, langsames Tempo,
-// weiche Hüllkurven, kleine zufällige Variationen. Läuft im Menü und im Spiel.
-const SCALE = [196.0, 220.0, 261.63, 293.66, 329.63, 392.0, 440.0, 523.25]; // G-Pentatonik über 2 Oktaven
-const STEP = 0.42;   // Sekunden pro Schritt (ruhiges Tempo)
+// Warme Marimba über einem leisen Handtrommel-Groove im 12/8-Takt - das passt
+// zur Savannen-Stimmung des Spiels. Vier Takte bilden einen Kreis (I-vi-IV-V),
+// die Melodie wandert alle vier Takte eine Oktave höher und wieder zurück, so
+// bleibt die Schleife lebendig, ohne beim Grübeln zu stören.
+
+// G-Dur-Pentatonik über gut zwei Oktaven: G A B D E …
+const SCALE = [196.00, 220.00, 246.94, 293.66, 329.63,
+               392.00, 440.00, 493.88, 587.33, 659.26, 783.99];
+const BASS = [98.00, 82.41, 65.41, 73.42];   // G2 · E2 · C2 · D2
+const STEP = 0.20;   // Sekunden je Achtel (12 Achtel = ein Takt à 2,4 s)
+const BAR = 12;
+
+// Marimba-Figur je Takt: Tonstufe pro Achtel, null = Pause
+const FIGUR = [
+  [0, null, 2, 4, null, 2, 5, null, 4, 2, null, 3],
+  [4, null, 2, 0, null, 3, 2, null, 4, 5, null, 4],
+  [2, null, 4, 5, null, 4, 3, null, 5, 4, null, 2],
+  [5, null, 4, 2, null, 4, 3, null, 2, 0, null, 1],
+];
+
 let musicTimer = 0;
 let nextStep = 0;
 let stepIdx = 0;
-let lastDeg = 4;
 
+// Rauschen für die Perkussion (eigener Weg über den leisen Musik-Bus)
+function mNoise(t, { freq, q = 1, dur = 0.06, vol = 0.1, type = 'bandpass' }) {
+  const c = ctx; if (!c) return;
+  if (!noiseBuf) {
+    const len = Math.floor(c.sampleRate * 0.5);
+    noiseBuf = c.createBuffer(1, len, c.sampleRate);
+    const d = noiseBuf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+  }
+  const src = c.createBufferSource(); src.buffer = noiseBuf; src.loop = true;
+  const f = c.createBiquadFilter(); f.type = type; f.frequency.value = freq; f.Q.value = q;
+  const g = c.createGain();
+  g.gain.setValueAtTime(vol, t);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  src.connect(f).connect(g).connect(musicBus);
+  src.start(t); src.stop(t + dur + 0.03);
+}
+
+// Marimba-Stab: Grundton mit weichem Ausklang, kurzer heller Anschlag darüber
 function pluck(freq, t, vol) {
-  // Kalimba-Zunge: Grundton mit langem Ausklang + kurzer, leiser Oberton
   const o1 = ctx.createOscillator(); o1.type = 'sine'; o1.frequency.value = freq;
-  const o2 = ctx.createOscillator(); o2.type = 'sine'; o2.frequency.value = freq * 2.01;
+  const o2 = ctx.createOscillator(); o2.type = 'sine'; o2.frequency.value = freq * 4.02;
   const g1 = ctx.createGain(), g2 = ctx.createGain();
   g1.gain.setValueAtTime(0, t);
-  g1.gain.linearRampToValueAtTime(vol, t + 0.006);
-  g1.gain.exponentialRampToValueAtTime(0.0001, t + 1.6);
+  g1.gain.linearRampToValueAtTime(vol, t + 0.005);
+  g1.gain.exponentialRampToValueAtTime(0.0001, t + 1.05);
   g2.gain.setValueAtTime(0, t);
-  g2.gain.linearRampToValueAtTime(vol * 0.25, t + 0.004);
-  g2.gain.exponentialRampToValueAtTime(0.0001, t + 0.45);
+  g2.gain.linearRampToValueAtTime(vol * 0.16, t + 0.003);
+  g2.gain.exponentialRampToValueAtTime(0.0001, t + 0.16);
   o1.connect(g1).connect(musicBus);
   o2.connect(g2).connect(musicBus);
-  o1.start(t); o1.stop(t + 1.8);
-  o2.start(t); o2.stop(t + 0.6);
+  o1.start(t); o1.stop(t + 1.2);
+  o2.start(t); o2.stop(t + 0.22);
+}
+
+// Handtrommel: tiefer Bauchschlag (deep) oder heller Randschlag
+function mDrum(t, vol, deep) {
+  const o = ctx.createOscillator(); o.type = 'sine';
+  const g = ctx.createGain();
+  o.frequency.setValueAtTime(deep ? 128 : 188, t);
+  o.frequency.exponentialRampToValueAtTime(deep ? 52 : 94, t + 0.10);
+  g.gain.setValueAtTime(0, t);
+  g.gain.linearRampToValueAtTime(vol, t + 0.004);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + (deep ? 0.40 : 0.24));
+  o.connect(g).connect(musicBus);
+  o.start(t); o.stop(t + 0.5);
+  mNoise(t, { freq: deep ? 300 : 640, q: 0.9, dur: 0.045, vol: vol * 0.3 });
+}
+
+const mSlap = (t, vol) => mNoise(t, { freq: 1900, q: 0.7, dur: 0.08, vol });
+const mShaker = (t, vol) => mNoise(t, { freq: 6200, q: 0.6, dur: 0.04, vol, type: 'highpass' });
+
+// Weicher Bass, der den Grundton des Takts trägt
+function mBass(freq, t, vol) {
+  const o = ctx.createOscillator(); o.type = 'triangle'; o.frequency.value = freq;
+  const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 420;
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0, t);
+  g.gain.linearRampToValueAtTime(vol, t + 0.03);
+  g.gain.setValueAtTime(vol, t + 0.22);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + 0.8);
+  o.connect(lp).connect(g).connect(musicBus);
+  o.start(t); o.stop(t + 0.9);
 }
 
 function scheduleStep(t) {
-  const beat = stepIdx % 16;
-  if (beat === 0) { pluck(SCALE[0], t, 0.5); return; }       // tiefer Grundton als Anker
-  if (beat === 8) { pluck(SCALE[2], t, 0.4); return; }       // sanfte Terz zur Mitte
-  if (Math.random() < 0.42) return;                          // Pausen lassen die Musik atmen
-  const walk = [-2, -1, -1, 0, 1, 1, 2][Math.floor(Math.random() * 7)];
-  lastDeg = Math.max(1, Math.min(SCALE.length - 1, lastDeg + walk));
-  pluck(SCALE[lastDeg], t + (Math.random() - 0.5) * 0.02, 0.3 + Math.random() * 0.14);
-  if (Math.random() < 0.14) pluck(SCALE[Math.max(0, lastDeg - 3)], t + 0.02, 0.16); // dezente Begleitnote
+  const bar = Math.floor(stepIdx / BAR) % 4;
+  const beat = stepIdx % BAR;
+  const hum = (Math.random() - 0.5) * 0.012;   // winzige Ungenauigkeit: klingt menschlich
+
+  mShaker(t + hum, beat % 3 === 0 ? 0.085 : 0.038);
+
+  if (beat === 0) mDrum(t, 0.46, true);
+  else if (beat === 6) mDrum(t, 0.36, true);
+  else if (beat === 3 || beat === 8 || beat === 10) mSlap(t + hum, 0.13);
+  if (bar === 3 && (beat === 9 || beat === 11)) mSlap(t + hum, 0.17);   // Fill am Kreis-Ende
+
+  if (beat === 0) mBass(BASS[bar], t, 0.32);
+  if (beat === 6) mBass(BASS[bar] * 1.5, t, 0.18);
+
+  const deg = FIGUR[bar][beat];
+  if (deg !== null) {
+    const hoch = Math.floor(stepIdx / (BAR * 4)) % 2 === 1 ? 5 : 0;  // alle 4 Takte eine Oktave höher
+    pluck(SCALE[Math.min(SCALE.length - 1, deg + hoch)], t + hum,
+          (beat === 0 ? 0.26 : 0.19) + Math.random() * 0.04);
+  }
 }
 
 function startMusicLoop() {

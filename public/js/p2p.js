@@ -85,9 +85,10 @@ function safeClose(x) { try { x && x.close(); } catch { /* egal */ } }
 // ---------- Gast: verbindet sich zum Gastgeber ----------
 
 export class DirectGuest {
-  constructor(name) {
+  constructor(name, av) {
     this.direct = true;
     this.name = name || 'Spieler';
+    this.av = av | 0;
     this.handlers = {};
     this.pc = null;
     this.ch = null;
@@ -111,7 +112,7 @@ export class DirectGuest {
 
   _wire(ch) {
     this.ch = ch;
-    ch.onopen = () => this.send({ t: 'hello', name: this.name });
+    ch.onopen = () => this.send({ t: 'hello', name: this.name, av: this.av });
     ch.onmessage = (e) => {
       let m; try { m = JSON.parse(e.data); } catch { return; }
       if (m.t === 'you') this.myId = m.id;
@@ -133,11 +134,11 @@ export class DirectGuest {
 // ---------- Gastgeber: trägt den Raum in seinem Browser ----------
 
 export class DirectHost {
-  constructor(name) {
+  constructor(name, av) {
     this.direct = true;
     this.handlers = {};
     this.myId = 1;
-    this.room = new LocalRoom(this, name);
+    this.room = new LocalRoom(this, name, av);
     this.pc = null;
     this.ch = null;
     this._closed = false;
@@ -189,10 +190,10 @@ export class DirectHost {
 // ---------- Raum-Logik (Nachbau von server.js für 2 Spieler) ----------
 
 class LocalRoom {
-  constructor(net, hostName) {
+  constructor(net, hostName, hostAv) {
     this.net = net;
-    this.players = [{ id: 1, name: String(hostName || 'Spieler').slice(0, 20), total: 0, gems: [],
-                      done: false, ms: null, prog: 0, progAt: 0, connected: true }];
+    this.players = [{ id: 1, name: String(hostName || 'Spieler').slice(0, 20), av: hostAv | 0,
+                      total: 0, gems: [], done: false, ms: null, prog: 0, progAt: 0, connected: true }];
     this.hostId = 1;
     this.difficulty = 'mittel';
     this.rounds = 9;
@@ -210,7 +211,7 @@ class LocalRoom {
     return {
       t: 'room', code: '📶', difficulty: this.difficulty, rounds: this.rounds,
       timeFactor: this.timeFactor,
-      players: this.players.map(p => ({ id: p.id, name: p.name, host: p.id === this.hostId,
+      players: this.players.map(p => ({ id: p.id, name: p.name, av: p.av, host: p.id === this.hostId,
                                         total: p.total, online: p.connected !== false })),
     };
   }
@@ -222,6 +223,7 @@ class LocalRoom {
       case 'hello': { // Gast ist da (Kanal offen)
         if (id !== 2 || this.players.length >= 2) return;
         this.players.push({ id: 2, name: String(msg.name || 'Spieler').slice(0, 20).replace(/[<>&"]/g, '').trim() || 'Spieler',
+                            av: (msg.av | 0) >= 1 && (msg.av | 0) <= 8 ? (msg.av | 0) : 0,
                             total: 0, gems: [], done: false, ms: null, prog: 0, progAt: 0, connected: true });
         this.net._deliver(2, { t: 'you', id: 2 });
         this.broadcast(this.lobbyState());
@@ -303,7 +305,7 @@ class LocalRoom {
   }
 
   progress() {
-    this.broadcast({ t: 'progress', players: this.players.map(p => ({ id: p.id, name: p.name,
+    this.broadcast({ t: 'progress', players: this.players.map(p => ({ id: p.id, name: p.name, av: p.av,
       done: p.done, ms: p.ms, prog: p.prog || 0, off: p.connected === false })) });
   }
 
@@ -322,7 +324,7 @@ class LocalRoom {
     this.broadcast({ t: 'roundResult', n: this.round, of: this.rounds, results });
     if (this.round >= this.rounds) {
       this.state = 'final';
-      const ranking = this.players.map(p => ({ id: p.id, name: p.name, total: p.total, gems: p.gems }))
+      const ranking = this.players.map(p => ({ id: p.id, name: p.name, av: p.av, total: p.total, gems: p.gems }))
         .sort((a, b) => b.total - a.total);
       this.broadcast({ t: 'final', ranking });
     } else {

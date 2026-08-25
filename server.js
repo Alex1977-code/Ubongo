@@ -71,7 +71,8 @@ function lobbyState(room) {
   return {
     t: 'room', code: room.code, difficulty: room.difficulty, rounds: room.rounds,
     timeFactor: room.timeFactor || 1,
-    players: room.players.map(p => ({ id: p.id, name: p.name, host: p.id === room.hostId, total: p.total, online: p.connected !== false })),
+    players: room.players.map(p => ({ id: p.id, name: p.name, av: p.av, host: p.id === room.hostId,
+                                     total: p.total, online: p.connected !== false })),
   };
 }
 
@@ -95,7 +96,8 @@ function startRound(room) {
 }
 
 function progress(room) {
-  broadcast(room, { t: 'progress', players: room.players.map(p => ({ id: p.id, name: p.name, done: p.done, ms: p.ms, prog: p.prog || 0, off: p.connected === false })) });
+  broadcast(room, { t: 'progress', players: room.players.map(p => ({ id: p.id, name: p.name, av: p.av,
+    done: p.done, ms: p.ms, prog: p.prog || 0, off: p.connected === false })) });
 }
 
 function finishRound(room) {
@@ -115,7 +117,7 @@ function finishRound(room) {
   broadcast(room, { t: 'roundResult', n: room.round, of: room.rounds, results });
   if (room.round >= room.rounds) {
     room.state = 'final';
-    const ranking = room.players.map(p => ({ id: p.id, name: p.name, total: p.total, gems: p.gems }))
+    const ranking = room.players.map(p => ({ id: p.id, name: p.name, av: p.av, total: p.total, gems: p.gems }))
       .sort((a, b) => b.total - a.total);
     for (const p of room.players) {
       addHighscore({ name: p.name, score: p.total, difficulty: room.difficulty, date: new Date().toISOString().slice(0, 10), online: true });
@@ -220,7 +222,8 @@ function rejoin(ws, token) {
       send(ws, { t: 'round', n: room.round, of: room.rounds, seed: p.seed, time: remaining,
                  full: room.timeTotal, pieces: room.pieces,
                  difficulty: room.difficulty, resumed: true, done: p.done, ms: p.ms });
-      send(ws, { t: 'progress', players: room.players.map(q => ({ id: q.id, name: q.name, done: q.done, ms: q.ms, prog: q.prog || 0, off: q.connected === false })) });
+      send(ws, { t: 'progress', players: room.players.map(q => ({ id: q.id, name: q.name, av: q.av,
+        done: q.done, ms: q.ms, prog: q.prog || 0, off: q.connected === false })) });
     } else if (room.state === 'final' && room.finalMsg) {
       send(ws, room.finalMsg);
     }
@@ -239,14 +242,16 @@ wss.on('connection', (ws) => {
     try { msg = JSON.parse(raw); } catch { return; }
     const room = ws.room;
     const clean = (s) => String(s || '').slice(0, 20).replace(/[<>&"]/g, '').trim();
+    const avNum = (v) => (v | 0) >= 1 && (v | 0) <= 8 ? (v | 0) : 0;   // 0 = aus dem Namen ableiten
 
     switch (msg.t) {
       case 'create': {
         const code = newCode();
         const diff = DIFFICULTIES[msg.difficulty] ? msg.difficulty : 'mittel';
         const rounds = Math.min(9, Math.max(1, msg.rounds | 0)) || 9;
-        const player = { id: nextPlayerId++, ws, name: clean(msg.name) || 'Spieler', total: 0, gems: [],
-                         done: false, ms: null, token: crypto.randomBytes(12).toString('hex'), connected: true };
+        const player = { id: nextPlayerId++, ws, name: clean(msg.name) || 'Spieler', av: avNum(msg.av),
+                         total: 0, gems: [], done: false, ms: null,
+                         token: crypto.randomBytes(12).toString('hex'), connected: true };
         const r = { code, players: [player], hostId: player.id, difficulty: diff, rounds, round: 0, state: 'lobby', timer: null };
         rooms.set(code, r);
         ws.room = r;
@@ -261,7 +266,7 @@ wss.on('connection', (ws) => {
         if (r.players.length >= 8) { send(ws, { t: 'error', msg: 'Der Raum ist voll (max. 8).' }); return; }
         // Erst anklopfen: Der Gastgeber entscheidet, wer hereinkommt.
         r.pending = r.pending || [];
-        const req = { id: nextReqId++, ws, name: clean(msg.name) || 'Spieler' };
+        const req = { id: nextReqId++, ws, name: clean(msg.name) || 'Spieler', av: avNum(msg.av) };
         req.timer = setTimeout(() => { // niemand reagiert: höflich abweisen
           removeKnock(r, req, true);
           send(req.ws, { t: 'error', msg: 'Keine Antwort vom Gastgeber – bitte später nochmal.', fatal: true });
@@ -288,7 +293,7 @@ wss.on('connection', (ws) => {
           send(req.ws, { t: 'error', msg: 'Der Raum ist inzwischen voll (max. 8).', fatal: true });
           return;
         }
-        const player = { id: nextPlayerId++, ws: req.ws, name: req.name, total: 0, gems: [],
+        const player = { id: nextPlayerId++, ws: req.ws, name: req.name, av: req.av, total: 0, gems: [],
                          done: false, ms: null, token: crypto.randomBytes(12).toString('hex'), connected: true };
         room.players.push(player);
         req.ws.knockRoom = null;

@@ -6,7 +6,7 @@ import { BoardView } from './board.js';
 import { makeBots, newRound, botProgress, botTick } from './ai.js';
 import { addLocalScore, recordSolve, recordMatch } from './highscore.js';
 import { roundGems, gemPoints, gemHTML, gemRow } from './gems.js';
-import { assetURL, avatarNum } from './assets.js';
+import { assetURL, avatarNum, avatarURL } from './assets.js';
 import * as snd from './sound.js';
 
 const $ = (id) => document.getElementById(id);
@@ -279,13 +279,19 @@ export class Game {
   }
 
   // Eigene Schatzleiste im Spielfeld (gesammelte Edelsteine + Gesamtwert)
+  // Schatzleiste: links die eigene Spielfigur mit Namen, rechts der Schatz.
+  // Sie bleibt die ganze Partie sichtbar - so weiss man immer, wer man ist.
   _renderShelf() {
     const shelf = $('gem-shelf');
     if (!shelf) return;
-    if (!this.myGems || this.myGems.length === 0) { shelf.classList.add('hidden'); shelf.innerHTML = ''; return; }
     shelf.classList.remove('hidden');
-    shelf.innerHTML = `<span class="shelf-gems">${gemRow(this.myGems, 21)}</span>` +
-      `<span class="shelf-total">= ${this.myTotal}</span>`;
+    const src = avatarURL(this.o.name, this.o.av);
+    const gems = this.myGems || [];
+    shelf.innerHTML =
+      (src ? `<img class="shelf-avatar" src="${src}" alt="">` : '') +
+      `<span class="shelf-name">${esc(this.o.name || 'Du')}</span>` +
+      (gems.length ? `<span class="shelf-gems">${gemRow(gems, 21)}</span>` +
+                     `<span class="shelf-total">= ${this.myTotal}</span>` : '');
   }
 
   _showRoundResult(results, solo) {
@@ -312,7 +318,7 @@ export class Game {
 
   _finalSolo() {
     const ranking = [
-      { name: this.o.name, me: true, av: avatarNum(this.o.name), total: this.myTotal, gems: this.myGems },
+      { name: this.o.name, me: true, av: this.o.av || avatarNum(this.o.name), total: this.myTotal, gems: this.myGems },
       ...this.bots.map(b => ({ name: b.name, emoji: b.emoji, av: b.avatar, total: b.total, gems: b.gems })),
     ].sort((a, b) => b.total - a.total);
     addLocalScore({ name: this.o.name, score: this.myTotal, difficulty: this.o.difficulty,
@@ -323,12 +329,15 @@ export class Game {
   }
 
   // ---------- Online-Ereignisse ----------
-  setRoster(players) { // Namen aus der Lobby (Progress-Nachrichten tragen nur IDs)
-    this.roster = Object.fromEntries(players.map(p => [p.id, p.name]));
+  setRoster(players) { // Namen + Spielfiguren aus der Lobby (Progress traegt nur IDs)
+    this.roster = Object.fromEntries(players.map(p => [p.id, { name: p.name, av: p.av }]));
   }
 
   onProgress(msg) {
-    this.oppState = msg.players.map(p => ({ ...p, name: (this.roster || {})[p.id] || p.name || 'Spieler' }));
+    this.oppState = msg.players.map(p => {
+      const r = (this.roster || {})[p.id] || {};
+      return { ...p, name: r.name || p.name || 'Spieler', av: p.av || r.av };
+    });
     this._renderOpponents();
   }
 
@@ -352,7 +361,7 @@ export class Game {
   onFinal(msg) {
     $('overlay-result').classList.add('hidden');
     const ranking = msg.ranking.map(r => ({ name: r.name, me: r.id === this.o.net.myId,
-      av: avatarNum(r.name), total: r.total, gems: r.gems }));
+      av: r.av || avatarNum(r.name), total: r.total, gems: r.gems }));
     recordMatch({ won: !!ranking[0]?.me, points: this.myTotal, gems: this.myGems });
     // Direktverbindung: kein Server, also lokal auf diesem Handy speichern
     if (this.o.direct) addLocalScore({ name: this.o.name, score: this.myTotal,
@@ -444,7 +453,7 @@ export class Game {
     } else {
       const players = (this.oppState || []).filter(p => p.id !== this.o.net.myId);
       host.innerHTML = players.map(p => {
-        const avSrc = assetURL('avatar-' + avatarNum(p.name));
+        const avSrc = avatarURL(p.name, p.av);
         const av = avSrc ? `<img class="opp-avatar" src="${avSrc}" alt=""> ` : '';
         return `<div class="opp ${p.done ? (p.ms != null ? 'done' : 'dnf') : ''} ${p.off ? 'dnf' : ''}">` +
           `<div class="opp-name">${av}${esc(p.name)}<span style="margin-left:auto">` +

@@ -34,6 +34,10 @@ export function setServer(s) { localStorage.setItem('ubongo.server', s); }
 export function getName()      { return localStorage.getItem('ubongo.name') || ''; }
 export function setName(n)     { localStorage.setItem('ubongo.name', n); }
 
+// Gewaehlte Spielfigur 1-8; 0 bedeutet "automatisch aus dem Namen ableiten".
+export function getAvatar()    { return parseInt(localStorage.getItem('ubongo.avatar'), 10) || 0; }
+export function setAvatar(n)   { localStorage.setItem('ubongo.avatar', String(n | 0)); }
+
 // ---------- Persönliche Statistik (auf diesem Handy) ----------
 const SKEY = 'ubongo.stats';
 const baseStats = () => ({ games: 0, wins: 0, solved: 0, bestMs: null, points: 0,
