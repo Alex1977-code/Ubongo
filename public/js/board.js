@@ -48,12 +48,38 @@ export class BoardView {
     // gespeicherten Glas-Bilder der alten Groesse werden nie wieder gebraucht.
     this._onResize = () => { resetGlassCache(); this.layout(); };
     window.addEventListener('resize', this._onResize);
+    // Das Canvas waechst erst, nachdem Gegner-Zeile und Schatzleiste gefuellt
+    // sind. Wird nur beim Start gemessen, zeichnet der Browser das fertige
+    // Bild gestaucht in die kleinere Flaeche - Zeichnung und Trefferflaeche
+    // laufen dann um bis zu eine Ablagezelle auseinander ("ich kann die Teile
+    // nicht anklicken"). Darum die echte Groesse dauerhaft beobachten.
+    if (typeof ResizeObserver === 'function') {
+      this._ro = new ResizeObserver(() => {
+        const r = this.canvas.getBoundingClientRect();
+        if (Math.abs(r.width - this.w) > 0.5 || Math.abs(r.height - this.h) > 0.5) this._onResize();
+      });
+      this._ro.observe(canvas);
+    }
+    // Sicherheitsnetz gegen haengende Zieh-Vorgaenge: Verlaesst der Nutzer das
+    // Fenster mit gedrueckter Taste, liefert der Browser kein pointerup mehr.
+    // Ohne das hier bliebe dragPiece gesetzt und _down wuerde jeden weiteren
+    // Klick verschlucken - das Brett waere tot.
+    this._onBlur = () => this._abortDrag();
+    window.addEventListener('blur', this._onBlur);
+    document.addEventListener('visibilitychange', this._onBlur);
 
     canvas.addEventListener('pointerdown', e => this._down(e));
     canvas.addEventListener('pointermove', e => this._move(e));
     canvas.addEventListener('pointerup', e => this._up(e));
     canvas.addEventListener('pointercancel', e => this._up(e, true));
-    canvas.addEventListener('lostpointercapture', e => this._up(e, true));
+    // lostpointercapture NICHT als Abbruch werten: Beim Druecken einer zweiten
+    // Maustaste gibt der Browser die Zeiger-Erfassung frei, die Ereignisse
+    // kommen aber weiter an. Ein laufender Zug darf daran nicht zerbrechen.
+    canvas.addEventListener('lostpointercapture', (e) => {
+      if (!(this.dragPiece && this.dragPiece.drag)) this._up(e, true);
+    });
+    // Rechtsklick soll kein Browser-Menue ueber dem Brett aufklappen
+    canvas.addEventListener('contextmenu', e => e.preventDefault());
 
     this.layout();
     const loop = () => { this.draw(); this._raf = requestAnimationFrame(loop); };
@@ -63,6 +89,20 @@ export class BoardView {
   destroy() {
     cancelAnimationFrame(this._raf);
     window.removeEventListener('resize', this._onResize);
+    window.removeEventListener('blur', this._onBlur);
+    document.removeEventListener('visibilitychange', this._onBlur);
+    if (this._ro) { this._ro.disconnect(); this._ro = null; }
+  }
+
+  // Laufenden Zug sauber abbrechen (Teil kehrt an seinen Ursprung zurueck)
+  _abortDrag() {
+    const p = this.dragPiece;
+    if (!p || !p.drag) return;
+    const d = p.drag;
+    p.drag = null;
+    this.dragPiece = null;
+    p.placed = d.wasPlaced;
+    this._after();
   }
 
   cells(p) { return transform(p.base, p.rot, p.flip); }
@@ -93,7 +133,10 @@ export class BoardView {
       const b = bounds(p.base);
       return Math.max(b.w, b.h);
     });
-    let tc = Math.min(this.cell * 0.62, 34);
+    // Untergrenze: bei einem sehr flachen Fenster wuerde die Schleife sonst
+    // gar nicht laufen - dann haette kein Teil einen Stammplatz und waere
+    // ueberhaupt nicht mehr anklickbar.
+    let tc = Math.max(12, Math.min(this.cell * 0.62, 34));
     for (; tc >= 12; tc -= 2) {
       const gap = 10;
       let x = 10, y = 0, rowH = 0;
@@ -162,6 +205,9 @@ export class BoardView {
 
   _down(e) {
     if (this.locked) return;
+    // Nur die primaere Taste greift. Ohne diese Pruefung startet auch ein
+    // Rechts- oder Mittelklick einen Zug - und dreht am Ende ein Teil.
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
     // Zweiter Finger während des Ziehens: Teil drehen
     if (this.dragPiece) {
       const dp = this.dragPiece;
@@ -202,10 +248,16 @@ export class BoardView {
     }
     relX = Math.max(0.2, Math.min(b.w - 0.2, relX));
     relY = Math.max(0.2, Math.min(b.h - 0.2, relY));
+    // Der Hub hebt das Teil ueber den Griffpunkt, damit der FINGER es nicht
+    // verdeckt. Ein Mauszeiger verdeckt nichts - dort wuerde der Hub nur dazu
+    // fuehren, dass man neben das Ziel legt und das Teil zurueckspringt.
+    const maus = e.pointerType === 'mouse';
+    const hub = maus ? 0 : this.cell * 1.1;
     p.drag = {
       pointerId: e.pointerId, x, y, startX: x, startY: y, t0: performance.now(),
       wasPlaced: wasPlaced ? { ...wasPlaced } : null, wasSelected, moved: false,
-      ox: -relX * this.cell, oy: -relY * this.cell - this.cell * 1.1,
+      maus,
+      ox: -relX * this.cell, oy: -relY * this.cell - hub,
     };
     // Das Teil bleibt liegen, bis wirklich gezogen wird – ein Tipp soll es
     // nicht anheben oder verschieben.
@@ -214,11 +266,26 @@ export class BoardView {
 
   _move(e) {
     const p = this.dragPiece;
-    if (!p || !p.drag || e.pointerId !== p.drag.pointerId) return;
+    if (!p || !p.drag || e.pointerId !== p.drag.pointerId) {
+      // Kein Zug: Der Mauszeiger zeigt, was man greifen kann. Am Rechner ist
+      // das die einzige Rueckmeldung, welche Flaeche ueberhaupt reagiert.
+      if (e.pointerType === 'mouse' && !this.dragPiece) {
+        const q = this._pos(e);
+        this.canvas.style.cursor = (!this.locked && this._pieceAt(q.x, q.y)) ? 'grab' : 'default';
+      }
+      return;
+    }
+    // Zieht die Maus ohne gedrueckte Taste, ist das pointerup verloren
+    // gegangen (Fensterwechsel, zweite Maustaste). Den Geister-Zug sauber
+    // beenden, sonst klebt das Teil am Zeiger und jeder Klick geht ins Leere.
+    if (e.pointerType === 'mouse' && e.buttons === 0) { this._abortDrag(); return; }
     e.preventDefault();
     const { x, y } = this._pos(e);
     p.drag.x = x; p.drag.y = y;
-    const threshold = Math.max(16, this.cell * 0.3); // fingerfreundlich
+    if (p.drag.maus) this.canvas.style.cursor = 'grabbing';
+    // Ein Finger wackelt, eine Maus nicht: fuer die Maus hebt das Teil
+    // fast sofort ab, sonst bliebe kurzes Schieben ein Tipp - und ein Tipp dreht.
+    const threshold = p.drag.maus ? 4 : Math.max(16, this.cell * 0.3);
     if (!p.drag.moved && Math.hypot(x - p.drag.startX, y - p.drag.startY) > threshold) {
       p.drag.moved = true;
       p.placed = null; // erst jetzt vom Brett abheben
@@ -230,6 +297,7 @@ export class BoardView {
   _up(e, cancel = false) {
     const p = this.dragPiece;
     if (!p || !p.drag || e.pointerId !== p.drag.pointerId) return;
+    if (p.drag.maus) this.canvas.style.cursor = 'grab';
     const d = p.drag;
     const quick = !d.moved; // Tipp = keine Bewegung, Druckdauer egal
     p.drag = null;
@@ -239,6 +307,10 @@ export class BoardView {
 
     if (quick) {
       // Erster Tipp wählt das Teil nur aus – erst weitere Tipps drehen es.
+      // Bewusst OHNE Doppelklick-Sperre: Am Rechner dreht man durch schnelles
+      // Mehrfachklicken, eine Sperre wuerde genau das verschlucken. Ein
+      // Doppelklick waehlt also aus und dreht einmal - das ist durchgehend
+      // dieselbe Regel und schnell gelernt.
       if (d.wasSelected) {
         this._transform(p, d.wasPlaced, 'rot');
       } else {
@@ -273,11 +345,14 @@ export class BoardView {
   _snapPos(p, px, py) {
     const exactX = (px - this.bx) / this.cell, exactY = (py - this.by) / this.cell;
     const gx = Math.round(exactX), gy = Math.round(exactY);
+    // Der Suchkreis muss groesser sein als der Hub von 1,1 Zellen - sonst ist
+    // ausgerechnet die angezielte Zeile unerreichbar und das Teil springt
+    // beim Verschieben vom Brett zurueck in die Ablage.
     const cand = [];
-    for (let dx = -1; dx <= 1; dx++) {
-      for (let dy = -1; dy <= 1; dy++) {
+    for (let dx = -2; dx <= 2; dx++) {
+      for (let dy = -2; dy <= 2; dy++) {
         const dist = Math.hypot(gx + dx - exactX, gy + dy - exactY);
-        if (dist <= 1.05) cand.push({ gx: gx + dx, gy: gy + dy, dist });
+        if (dist <= 1.45) cand.push({ gx: gx + dx, gy: gy + dy, dist });
       }
     }
     cand.sort((a, b) => a.dist - b.dist);
@@ -814,6 +889,7 @@ export class BoardView {
 
   _btnTransform(kind) {
     if (this.locked) return;
+    this._abortDrag();   // sonst dreht das nachlaufende pointerup ein zweites Mal
     let p = this.pieces.find(q => q.id === this.selectedId);
     if (!p) { p = this.pieces.find(q => !q.placed); if (p) this.selectedId = p.id; }
     if (!p) return;

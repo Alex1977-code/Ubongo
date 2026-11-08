@@ -35,6 +35,22 @@ const newPhone = async (name) => {
   return page;
 };
 
+// Rechner statt Handy: echte Maus, kein Touch, grosses Fenster
+const newDesktop = async (name) => {
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 860 } });
+  const page = await ctx.newPage();
+  page.errors = [];
+  page.on('pageerror', e => page.errors.push(name + ': ' + e.message));
+  page.on('console', m => {
+    if (m.type() !== 'error') return;
+    const url = (m.location() && m.location().url) || '';
+    if (url.includes('/img/')) return;
+    page.errors.push(name + ' console: ' + m.text());
+  });
+  await page.goto(`http://localhost:${PORT}/`);
+  return page;
+};
+
 try {
   // ---------- Solo-Spiel ----------
   const p = await newPhone('A');
@@ -325,7 +341,108 @@ try {
   assert((await C.textContent('#final-note')).includes('diesem Handy'),
     'Direkt: Highscore wird lokal gespeichert (kein Server)');
 
-  for (const page of [p, A, B, C, D]) {
+  // ---------- Bedienung am Rechner (Maus) ----------
+  const M = await newDesktop('Maus');
+  await M.click('[data-goto="solo"]');
+  await M.fill('#solo-name', 'Alex');
+  await M.click('#solo-diff .chip[data-val="experte"]');   // viele, kleine Teile
+  await M.click('#solo-rounds .chip[data-val="1"]');
+  await M.click('#solo-start');
+  await M.waitForFunction(() => window.__ubongo.game && window.__ubongo.game.board &&
+    !window.__ubongo.game.board.locked, null, { timeout: 9000 });
+
+  // Zeichenpuffer und Element muessen gleich gross sein - sonst wird das Bild
+  // gestaucht und die Teile liegen neben ihrer Trefferflaeche.
+  const mass = await M.evaluate(() => {
+    const b = window.__ubongo.game.board, r = b.canvas.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    return { dy: +(b.canvas.height / dpr - r.height).toFixed(1),
+             dx: +(b.canvas.width / dpr - r.width).toFixed(1) };
+  });
+  assert(Math.abs(mass.dy) < 1 && Math.abs(mass.dx) < 1,
+    `Rechner: Canvas wird unverzerrt gezeichnet (Abweichung ${mass.dx}/${mass.dy} px)`);
+
+  // Jedes Ablage-Teil dort anklicken, wo es sichtbar liegt
+  const ziele = await M.evaluate(() => {
+    const b = window.__ubongo.game.board, r = b.canvas.getBoundingClientRect();
+    return b.pieces.map(q => {
+      const c = b.cells(q)[0];
+      return { id: q.id,
+        x: r.left + q.tray.x + (c[0] + 0.5) * q.tray.cell,
+        y: r.top + q.tray.y + (c[1] + 0.5) * q.tray.cell };
+    });
+  });
+  let treffer = 0;
+  for (const z of ziele) {
+    await M.mouse.move(z.x, z.y);
+    await M.mouse.down(); await M.mouse.up();
+    if (await M.evaluate(() => window.__ubongo.game.board.selectedId) === z.id) treffer++;
+  }
+  assert(treffer === ziele.length, `Rechner: alle Teile per Mausklick erreichbar (${treffer}/${ziele.length})`);
+
+  // Kurzes Ziehen muss schieben, nicht drehen
+  const vorRot = await M.evaluate(() => window.__ubongo.game.board.pieces.map(q => q.rot));
+  await M.mouse.move(ziele[0].x, ziele[0].y);
+  await M.mouse.down();
+  for (let i = 1; i <= 5; i++) await M.mouse.move(ziele[0].x + i * 2, ziele[0].y + i * 2);
+  const hebt = await M.evaluate(() => {
+    const b = window.__ubongo.game.board;
+    return !!(b.dragPiece && b.dragPiece.drag && b.dragPiece.drag.moved);
+  });
+  await M.mouse.up();
+  const nachRot = await M.evaluate(() => window.__ubongo.game.board.pieces.map(q => q.rot));
+  assert(hebt, 'Rechner: kurzes Ziehen (10 px) hebt das Teil an');
+  assert(JSON.stringify(vorRot) === JSON.stringify(nachRot), 'Rechner: kurzes Ziehen dreht nicht');
+
+  // Rechtsklick darf nichts veraendern
+  await M.mouse.down({ button: 'right' }); await M.mouse.up({ button: 'right' });
+  const nachRechts = await M.evaluate(() => window.__ubongo.game.board.pieces.map(q => q.rot));
+  assert(JSON.stringify(nachRot) === JSON.stringify(nachRechts), 'Rechner: Rechtsklick dreht kein Teil');
+
+  // Zielen mit dem Zeiger: das Teil rastet dort ein, wohin man zeigt
+  const zielOk = await (async () => {
+    const z = await M.evaluate(() => {
+      const g = window.__ubongo.game, b = g.board, sol = g.card.solution[0];
+      const q = b.pieces.find(x => x.id === sol.id);
+      const minX = Math.min(...sol.cells.map(c => c[0])), minY = Math.min(...sol.cells.map(c => c[1]));
+      const norm = sol.cells.map(([x, y]) => [x - minX, y - minY]).sort((a, b2) => a[1] - b2[1] || a[0] - b2[0]);
+      outer: for (let f = 0; f < 2; f++) for (let r = 0; r < 4; r++) {
+        q.rot = r; q.flip = f;
+        if (JSON.stringify(b.cells(q)) === JSON.stringify(norm)) break outer;
+      }
+      b._layoutTray();
+      const rect = b.canvas.getBoundingClientRect(), cc = b.cells(q)[0];
+      return { id: sol.id,
+        from: { x: rect.left + q.tray.x + (cc[0] + 0.5) * q.tray.cell,
+                y: rect.top + q.tray.y + (cc[1] + 0.5) * q.tray.cell },
+        to: { x: rect.left + b.bx + (minX + cc[0] + 0.5) * b.cell,
+              y: rect.top + b.by + (minY + cc[1] + 0.5) * b.cell } };
+    });
+    await M.mouse.move(z.from.x, z.from.y);
+    await M.mouse.down();
+    for (let k = 1; k <= 14; k++) {
+      await M.mouse.move(z.from.x + (z.to.x - z.from.x) * k / 14,
+                         z.from.y + (z.to.y - z.from.y) * k / 14);
+    }
+    await M.mouse.up();
+    return M.evaluate((id) => !!window.__ubongo.game.board.pieces.find(q => q.id === id).placed, z.id);
+  })();
+  assert(zielOk, 'Rechner: Teil rastet dort ein, wohin der Zeiger zeigt (kein Hochversatz)');
+
+  // Haengende Zieh-Geste darf das Brett nicht blockieren
+  await M.mouse.move(ziele[1].x, ziele[1].y);
+  await M.mouse.down();
+  await M.mouse.move(ziele[1].x + 40, ziele[1].y + 40);
+  await M.evaluate(() => {           // Bewegung ohne Taste = verlorenes pointerup
+    window.__ubongo.game.board.canvas.dispatchEvent(new PointerEvent('pointermove', {
+      pointerId: 1, pointerType: 'mouse', buttons: 0, clientX: 300, clientY: 400, bubbles: true }));
+  });
+  const zugBeendet = await M.evaluate(() => !window.__ubongo.game.board.dragPiece);
+  await M.mouse.up();
+  assert(zugBeendet, 'Rechner: hängende Zieh-Geste wird automatisch beendet');
+  await M.screenshot({ path: SHOT_DIR + '/shot-desktop.png' });
+
+  for (const page of [p, A, B, C, D, M]) {
     for (const err of page.errors) { console.log('FAIL Browserfehler: ' + err); fails++; }
   }
 } catch (e) {
